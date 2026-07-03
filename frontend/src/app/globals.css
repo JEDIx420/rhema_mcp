@@ -1,26 +1,56 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base: #0f1218;
+  --bg-surface: #181c25;
+  --bg-surface-elevated: #232831;
+  --border-subtle: #2a303b;
+  --border-focus: #34d399;
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --secondary: #38bdf8;
+  --accent: #a78bfa;
+  --text-primary: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-accent: #6ee7b7;
+  --glass-blur: blur(16px);
+  --glass-bg: rgba(20, 24, 33, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Selection */
+::selection {
+  background: rgba(52, 211, 153, 0.25);
+  color: var(--text-primary);
 }
