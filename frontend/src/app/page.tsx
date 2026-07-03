@@ -5,48 +5,102 @@ import Sidebar from "@/components/Sidebar";
 import ReadingDesk from "@/components/ReadingDesk";
 import SearchView from "@/components/SearchView";
 import DictionaryView from "@/components/DictionaryView";
+import MapView from "@/components/MapView";
+import TimelineView from "@/components/TimelineView";
+import GenealogyView from "@/components/GenealogyView";
+import SettingsView from "@/components/SettingsView";
+import CommandCenter from "@/components/CommandCenter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, Map, Users, Settings } from "lucide-react";
-
-function PlaceholderView({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <Icon size={64} className="mx-auto mb-4 opacity-15" style={{ color: "var(--primary)" }} />
-        <h2 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>{title}</h2>
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>{subtitle}</p>
-      </div>
-    </div>
-  );
-}
 
 export default function Home() {
   const [activeView, setActiveView] = useState("read");
+  const [book, setBook] = useState("GEN");
+  const [chapter, setChapter] = useState(1);
+  const [selectedVerseId, setSelectedVerseId] = useState<string | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>("Adam_1");
+
+  const handleNavigate = (b: string, c: number, v?: number) => {
+    setBook(b);
+    setChapter(c);
+    if (v) {
+      setSelectedVerseId(`${b}.${c}.${v}`);
+    } else {
+      setSelectedVerseId(null);
+    }
+  };
 
   const renderView = () => {
     switch (activeView) {
       case "read":
-        return <ReadingDesk />;
+        return (
+          <ReadingDesk
+            book={book}
+            chapter={chapter}
+            setBook={setBook}
+            setChapter={setChapter}
+            selectedVerseId={selectedVerseId}
+            setSelectedVerseId={setSelectedVerseId}
+            onViewChange={setActiveView}
+          />
+        );
       case "search":
         return <SearchView />;
       case "dictionary":
         return <DictionaryView />;
       case "map":
-        return <PlaceholderView icon={Map} title="Geography & Maps" subtitle="Interactive maps with geocoded biblical locations. Coming soon." />;
+        return (
+          <MapView
+            book={book}
+            chapter={chapter}
+            onNavigate={handleNavigate}
+          />
+        );
       case "timeline":
-        return <PlaceholderView icon={Clock} title="Chronological Timeline" subtitle="Interactive timeline of biblical events. Coming soon." />;
+        return (
+          <TimelineView
+            onNavigate={handleNavigate}
+            onViewChange={setActiveView}
+          />
+        );
       case "people":
-        return <PlaceholderView icon={Users} title="People & Genealogy" subtitle="Biographical profiles and family trees. Coming soon." />;
+        return (
+          <GenealogyView
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={setSelectedPersonId}
+            onNavigate={handleNavigate}
+            onViewChange={setActiveView}
+          />
+        );
       case "settings":
-        return <PlaceholderView icon={Settings} title="Settings" subtitle="Server configuration and translation downloads. Coming soon." />;
+        return <SettingsView />;
       default:
-        return <ReadingDesk />;
+        return (
+          <ReadingDesk
+            book={book}
+            chapter={chapter}
+            setBook={setBook}
+            setChapter={setChapter}
+            selectedVerseId={selectedVerseId}
+            setSelectedVerseId={setSelectedVerseId}
+            onViewChange={setActiveView}
+          />
+        );
     }
   };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
+      {/* CommandCenter Keyboard-Activated Command Launcher */}
+      <CommandCenter
+        onNavigate={handleNavigate}
+        onSelectPerson={setSelectedPersonId}
+        onViewChange={setActiveView}
+      />
+
+      {/* Persistent Sidebar */}
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      
+      {/* Main Panel Viewport */}
       <main className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div

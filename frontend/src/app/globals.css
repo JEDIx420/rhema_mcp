@@ -1,21 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base: #0f1218;
-  --bg-surface: #181c25;
-  --bg-surface-elevated: #232831;
-  --border-subtle: #2a303b;
-  --border-focus: #34d399;
-  --primary: #34d399;
-  --primary-hover: #6ee7b7;
-  --secondary: #38bdf8;
-  --accent: #a78bfa;
-  --text-primary: #f1f5f9;
-  --text-muted: #94a3b8;
-  --text-accent: #6ee7b7;
-  --glass-blur: blur(16px);
-  --glass-bg: rgba(20, 24, 33, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  /* Light Mode Exegesis Theme - Crisp white base with blue accents */
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-popover: #ffffff;
+  
+  --border-subtle: #e2e8f0;
+  --border-focus: #2563eb;
+  
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --secondary: #0ea5e9;
+  --accent: #4f46e5;
+  
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --text-accent: #2563eb;
+  
+  --glass-blur: none;
+  --glass-border: #e2e8f0;
+  --glow-shadow: 0 4px 20px rgba(37, 99, 235, 0.05);
 }
 
 * {
@@ -26,14 +32,29 @@
 
 html, body {
   height: 100%;
-  background: var(--bg-base);
+  background: #f8fafc;
+  background-image: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
-/* Scrollbar Styling */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-outfit), sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Glassmorphism utility card */
+.glass-panel {
+  background: var(--bg-surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.05);
+}
+
+/* Custom Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -42,15 +63,47 @@ html, body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: rgba(37, 99, 235, 0.25);
 }
 
 /* Selection */
 ::selection {
-  background: rgba(52, 211, 153, 0.25);
-  color: var(--text-primary);
+  background: rgba(37, 99, 235, 0.12);
+  color: #1e3a8a;
+}
+
+/* Leaflet light theme adjustments */
+.leaflet-container {
+  background: #f1f5f9 !important;
+  font-family: var(--font-inter), sans-serif !important;
+}
+.leaflet-popup-content-wrapper {
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08) !important;
+}
+.leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+.leaflet-bar {
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: none !important;
+}
+.leaflet-bar a {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  transition: all 0.2s !important;
+}
+.leaflet-bar a:hover {
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
 }

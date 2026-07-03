@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
 
 export async function fetchChapter(book: string, chapter: number) {
   const res = await fetch(`${API_BASE}/api/read?book=${book}&chapter=${chapter}`);
@@ -47,5 +47,23 @@ export async function fetchChapterMap(book: string, chapter: number) {
 export async function fetchTimeline() {
   const res = await fetch(`${API_BASE}/api/timeline`);
   if (!res.ok) throw new Error("Failed to fetch timeline");
+  return res.json();
+}
+
+export async function lookupLexicon(word: string) {
+  const res = await fetch(`${API_BASE}/api/lexicon/lookup?q=${encodeURIComponent(word)}`);
+  if (!res.ok) throw new Error("Failed to lookup word");
+  return res.json();
+}
+
+export async function fetchOccurrences(lemma: string) {
+  const res = await fetch(`${API_BASE}/api/lexicon/occurrences?lemma=${encodeURIComponent(lemma)}`);
+  if (!res.ok) throw new Error("Failed to fetch occurrences");
+  return res.json();
+}
+
+export async function fetchStats() {
+  const res = await fetch(`${API_BASE}/api/stats`);
+  if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
 }

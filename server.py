@@ -312,6 +312,75 @@ def get_chapter_map_data(book: str, chapter: int) -> str:
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+import unicodedata
+
+# In-memory lexicon lookup dictionary
+LEXICON_LOOKUP = {}
+
+def normalize_text(text):
+    if not text:
+        return ""
+    normalized = unicodedata.normalize('NFD', text)
+    stripped = ''.join(c for c in normalized if not (unicodedata.combining(c) or (0x0591 <= ord(c) <= 0x05C7)))
+    return stripped.lower().strip('.,;:!?\'\"()[]{}׃.-')
+
+def get_language(text):
+    for c in text:
+        val = ord(c)
+        if 0x0590 <= val <= 0x05FF:
+            return "hebrew"
+        if 0x0370 <= val <= 0x03FF or 0x1F00 <= val <= 0x1FFF:
+            return "greek"
+    return "english"
+
+def find_matching_strongs(word):
+    w = normalize_text(word)
+    if not w:
+        return []
+    
+    # Try direct lookup
+    if w in LEXICON_LOOKUP:
+        return LEXICON_LOOKUP[w]
+    
+    lang = get_language(word)
+    if lang == "hebrew":
+        # Try prefix stripping for Hebrew words
+        prefixes = ['ו', 'ה', 'ב', 'ל', 'כ', 'מ', 'ש', 'י', 'ת', 'א', 'נ']
+        for p in prefixes:
+            if w.startswith(p) and len(w) > 2:
+                sub = w[1:]
+                if sub in LEXICON_LOOKUP:
+                    return LEXICON_LOOKUP[sub]
+                # Try secondary prefix combinations
+                for p2 in prefixes:
+                    if sub.startswith(p2) and len(sub) > 2:
+                        sub2 = sub[1:]
+                        if sub2 in LEXICON_LOOKUP:
+                            return LEXICON_LOOKUP[sub2]
+    return []
+
+def build_lexicon_lookup():
+    global LEXICON_LOOKUP
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT strongs_id, lemma FROM lexicon_fts")
+        rows = cursor.fetchall()
+        
+        temp_lookup = {}
+        for strongs_id, lemma in rows:
+            norm = normalize_text(lemma)
+            if norm:
+                if norm not in temp_lookup:
+                    temp_lookup[norm] = []
+                temp_lookup[norm].append(strongs_id)
+        
+        LEXICON_LOOKUP = temp_lookup
+        print(f"Successfully cached {len(rows)} lexicon lemmas into {len(temp_lookup)} lookup keys.")
+    except Exception as e:
+        print(f"Error caching lexicon lemmas: {e}")
+    finally:
+        conn.close()
 
 class JSONAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -365,6 +434,12 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         commentary_rows = cursor.fetchall()
                         commentaries = [c[0] for c in commentary_rows]
                         
+                        # Parse morphology
+                        try:
+                            morph = json.loads(r['morphology']) if r['morphology'] else []
+                        except:
+                            morph = []
+                        
                         verses_list.append({
                             "id": r['id'], "book": r['book'], "chapter": r['chapter'], "verse": r['verse'],
                             "text_en": r['text_en'], "text_original": r['text_original'],
@@ -372,7 +447,8 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                             "text_ml": r['text_ml'], "text_ta": r['text_ta'],
                             "cross_references_count": cross_ref_count,
                             "places_count": places_count,
-                            "commentaries": commentaries
+                            "commentaries": commentaries,
+                            "morphology": morph
                         })
                     response_data = {"verses": verses_list}
                     status_code = 200
@@ -405,6 +481,12 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT * FROM verses WHERE id = ?", (verse_id.upper(),))
                     row = cursor.fetchone()
                     if row:
+                        verse_dict = dict(row)
+                        try:
+                            verse_dict['morphology'] = json.loads(verse_dict['morphology']) if verse_dict['morphology'] else []
+                        except:
+                            verse_dict['morphology'] = []
+                        
                         # Get commentaries
                         cursor.execute("SELECT commentary_id, text FROM commentaries WHERE verse_id = ?", (verse_id.upper(),))
                         comms = [dict(c) for c in cursor.fetchall()]
@@ -429,14 +511,16 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         
                         # Get cross-references
                         cursor.execute("""
-                            SELECT to_verse, votes FROM cross_references 
-                            WHERE from_verse = ? 
-                            ORDER BY votes DESC LIMIT 15
+                            SELECT cr.to_verse, cr.votes, v.text_en AS text_en
+                            FROM cross_references cr
+                            LEFT JOIN verses v ON cr.to_verse = v.id
+                            WHERE cr.from_verse = ? 
+                            ORDER BY cr.votes DESC LIMIT 15
                         """, (verse_id.upper(),))
                         cross_refs = [dict(cr) for cr in cursor.fetchall()]
                         
                         response_data = {
-                            "verse": dict(row),
+                            "verse": verse_dict,
                             "commentaries": comms,
                             "places": places,
                             "events": events,
@@ -466,6 +550,46 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     response_data = {"lexicon": lex_rows, "dictionary": dict_rows}
                     status_code = 200
 
+            elif path == "/api/lexicon/lookup":
+                q = query_params.get("q", [""])[0]
+                results = []
+                if q:
+                    matched_ids = find_matching_strongs(q)
+                    for sid in matched_ids:
+                        cursor.execute("""
+                            SELECT strongs_id, lemma, definition 
+                            FROM lexicon_fts 
+                            WHERE strongs_id = ?
+                        """, (sid,))
+                        row = cursor.fetchone()
+                        if row:
+                            results.append(dict(row))
+                response_data = {"results": results}
+                status_code = 200
+
+            elif path == "/api/lexicon/occurrences":
+                lemma = query_params.get("lemma", [""])[0]
+                results = []
+                if lemma:
+                    cursor.execute("""
+                        SELECT id, book, chapter, verse, text_en, text_original
+                        FROM verses 
+                        WHERE morphology LIKE ? 
+                        LIMIT 20
+                    """, (f'%"lemma": "{lemma}"%',))
+                    rows = cursor.fetchall()
+                    if not rows:
+                        cursor.execute("""
+                            SELECT id, book, chapter, verse, text_en, text_original
+                            FROM verses 
+                            WHERE text_original LIKE ? 
+                            LIMIT 20
+                        """, (f'%{lemma}%',))
+                        rows = cursor.fetchall()
+                    results = [dict(r) for r in rows]
+                response_data = {"occurrences": results}
+                status_code = 200
+
             elif path == "/api/topics":
                 q = query_params.get("q", [""])[0]
                 if q:
@@ -491,7 +615,7 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     if person:
                         # Get relationships
                         cursor.execute("""
-                            SELECT r.relationship_type, p.name AS relation_name, r.person_id_2 AS relation_id, r.verse_id 
+                            SELECT r.relationship_type, p.name AS relation_name, r.person_id_2 AS relation_id, p.sex AS relation_sex, r.verse_id 
                             FROM relationships r
                             JOIN people p ON r.person_id_2 = p.id
                             WHERE r.person_id_1 = ?
@@ -526,10 +650,42 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     response_data = {"places": rows}
                     status_code = 200
 
+            elif path == "/api/stats":
+                cursor.execute("SELECT count(*) FROM verses")
+                verses_count = cursor.fetchone()[0]
+                cursor.execute("SELECT count(*) FROM lexicon_fts")
+                lexicon_count = cursor.fetchone()[0]
+                cursor.execute("SELECT count(*) FROM dictionary_entries")
+                dict_count = cursor.fetchone()[0]
+                cursor.execute("SELECT count(*) FROM geography_places")
+                places_count = cursor.fetchone()[0]
+                cursor.execute("SELECT count(*) FROM timeline_events")
+                events_count = cursor.fetchone()[0]
+                cursor.execute("SELECT count(*) FROM people")
+                people_count = cursor.fetchone()[0]
+                
+                response_data = {
+                    "status": "connected",
+                    "stats": {
+                        "verses": verses_count,
+                        "lexicon": lexicon_count,
+                        "dictionaries": dict_count,
+                        "places": places_count,
+                        "events": events_count,
+                        "people": people_count
+                    }
+                }
+                status_code = 200
+
             elif path == "/api/timeline":
                 cursor.execute("SELECT * FROM timeline_events ORDER BY year")
-                events = [dict(e) for e in cursor.fetchall()]
-                response_data = {"events": events}
+                events_list = []
+                for e in cursor.fetchall():
+                    event_dict = dict(e)
+                    cursor.execute("SELECT verse_id FROM event_verses WHERE event_id = ?", (e['event_id'],))
+                    event_dict['verses'] = [row[0] for row in cursor.fetchall()]
+                    events_list.append(event_dict)
+                response_data = {"events": events_list}
                 status_code = 200
 
         except Exception as e:
@@ -545,15 +701,23 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response_data).encode('utf-8'))
 
 def start_http_server():
-    server = HTTPServer(('0.0.0.0', 5000), JSONAPIHandler)
-    print("Built-in HTTP JSON API Server running on port 5000...")
+    server = HTTPServer(('0.0.0.0', 5050), JSONAPIHandler)
+    print("Built-in HTTP JSON API Server running on port 5050...")
     server.serve_forever()
 
 if __name__ == "__main__":
-    # Start the built-in HTTP server in a separate thread so it doesn't block stdio MCP transport
-    api_thread = threading.Thread(target=start_http_server, daemon=True)
-    api_thread.start()
+    # Cache lexicon lemmas first
+    build_lexicon_lookup()
 
-    # Start the MCP server
-    mcp.run()
+    import sys
+    # If stdin is not a TTY (running in background, redirect, or daemon), run HTTP server in the main thread
+    if not sys.stdin.isatty():
+        print("Non-interactive mode detected. Running HTTP JSON API Server on main thread...")
+        start_http_server()
+    else:
+        print("Interactive mode detected. Running HTTP JSON API Server on thread and MCP stdio on main thread...")
+        api_thread = threading.Thread(target=start_http_server, daemon=True)
+        api_thread.start()
+        # Start the MCP server (blocks on stdio)
+        mcp.run()
 

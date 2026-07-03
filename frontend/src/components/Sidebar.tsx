@@ -10,8 +10,6 @@ import {
   Users,
   BookMarked,
   Settings,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -21,7 +19,6 @@ const NAV_ITEMS = [
   { id: "timeline", label: "Timeline", icon: Clock },
   { id: "people", label: "People", icon: Users },
   { id: "dictionary", label: "Dictionary", icon: BookMarked },
-  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar({
@@ -31,34 +28,45 @@ export default function Sidebar({
   activeView: string;
   onViewChange: (view: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <motion.aside
-      animate={{ width: expanded ? 200 : 64 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="relative flex flex-col items-center py-4 border-r shrink-0"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      animate={{ width: hovered ? 220 : 64 }}
+      transition={{ duration: 0.2, ease: "easeInOut" }}
+      className="relative h-full flex flex-col items-center border-r shrink-0 z-20"
       style={{
         background: "var(--bg-surface)",
         borderColor: "var(--border-subtle)",
+        backdropFilter: "var(--glass-blur)",
+        WebkitBackdropFilter: "var(--glass-blur)",
       }}
     >
-      {/* Logo */}
-      <div className="mb-6 flex items-center justify-center w-full px-3">
+      {/* Brand Header - Height strictly matched to top navbar (64px / h-16) */}
+      <div className="h-16 w-full px-4 border-b flex items-center shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
-          style={{ background: "var(--primary)", color: "var(--bg-base)" }}
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-md shrink-0"
+          style={{
+            background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)",
+            color: "#ffffff",
+            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+          }}
         >
-          R
+          rh
         </div>
         <AnimatePresence>
-          {expanded && (
+          {hovered && (
             <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              className="ml-3 font-semibold text-sm whitespace-nowrap overflow-hidden"
-              style={{ fontFamily: "var(--font-outfit), sans-serif" }}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              className="ml-3 font-bold text-xs tracking-wider uppercase bg-clip-text text-transparent"
+              style={{
+                fontFamily: "var(--font-outfit), sans-serif",
+                backgroundImage: "linear-gradient(to right, var(--text-primary), var(--primary))",
+              }}
             >
               Rhema
             </motion.span>
@@ -66,8 +74,8 @@ export default function Sidebar({
         </AnimatePresence>
       </div>
 
-      {/* Nav Items */}
-      <nav className="flex flex-col gap-1 w-full px-2 flex-1">
+      {/* Main Navigation links - spaced out starting from top */}
+      <nav className="flex flex-col gap-3 w-full px-3 pt-6 flex-1 justify-start">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
@@ -75,41 +83,97 @@ export default function Sidebar({
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 cursor-pointer"
+              className={`flex items-center rounded-xl transition-all duration-200 cursor-pointer relative group w-full py-3 ${
+                hovered ? "justify-start px-3.5 gap-3.5" : "justify-center px-0"
+              }`}
               style={{
-                background: isActive
-                  ? "rgba(52, 211, 153, 0.12)"
-                  : "transparent",
                 color: isActive ? "var(--primary)" : "var(--text-muted)",
               }}
-              title={item.label}
+              title={hovered ? "" : item.label}
             >
-              <Icon size={20} className="shrink-0" />
+              <div className="absolute inset-0 rounded-xl bg-slate-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+              
+              <Icon
+                size={18}
+                className="shrink-0 transition-transform duration-200 group-hover:scale-105"
+                style={{
+                  color: isActive ? "var(--primary)" : "inherit",
+                }}
+              />
+              
               <AnimatePresence>
-                {expanded && (
+                {hovered && (
                   <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="text-sm whitespace-nowrap overflow-hidden"
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -5 }}
+                    className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden"
                   >
                     {item.label}
                   </motion.span>
                 )}
               </AnimatePresence>
+
+              {isActive && (
+                <motion.div
+                  layoutId="active-indicator"
+                  className="absolute left-0 w-1 h-5 rounded-r bg-blue-600"
+                  style={{
+                    boxShadow: "0 0 10px rgba(37, 99, 235, 0.6)",
+                  }}
+                />
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Expand Toggle */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="mt-auto mb-2 p-2 rounded-lg transition-colors cursor-pointer"
-        style={{ color: "var(--text-muted)" }}
-      >
-        {expanded ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-      </button>
+      {/* Bottom Section - Settings aligned at the bottom */}
+      <div className="w-full px-2 pb-4 border-t pt-3 shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
+        <button
+          onClick={() => onViewChange("settings")}
+          className={`flex items-center rounded-xl transition-all duration-200 cursor-pointer relative group w-full py-3 ${
+            hovered ? "justify-start px-3.5 gap-3.5" : "justify-center px-0"
+          }`}
+          style={{
+            color: activeView === "settings" ? "var(--primary)" : "var(--text-muted)",
+          }}
+          title={hovered ? "" : "Settings"}
+        >
+          <div className="absolute inset-0 rounded-xl bg-slate-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+          
+          <Settings
+            size={18}
+            className="shrink-0 transition-transform duration-200 group-hover:scale-105"
+            style={{
+              color: activeView === "settings" ? "var(--primary)" : "inherit",
+            }}
+          />
+          
+          <AnimatePresence>
+            {hovered && (
+              <motion.span
+                initial={{ opacity: 0, x: -5 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -5 }}
+                className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden"
+              >
+                Settings
+              </motion.span>
+            )}
+          </AnimatePresence>
+
+          {activeView === "settings" && (
+            <motion.div
+              layoutId="active-indicator"
+              className="absolute left-0 w-1 h-5 rounded-r bg-blue-600"
+              style={{
+                boxShadow: "0 0 10px rgba(37, 99, 235, 0.6)",
+              }}
+            />
+          )}
+        </button>
+      </div>
     </motion.aside>
   );
 }
