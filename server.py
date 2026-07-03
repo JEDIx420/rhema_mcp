@@ -308,5 +308,252 @@ def get_chapter_map_data(book: str, chapter: int) -> str:
     finally:
         conn.close()
 
+# --- Built-in HTTP JSON API Server for Next.js Frontend ---
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+
+class JSONAPIHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Suppress logging to stdout to prevent polluting stdio MCP traffic
+        pass
+
+    def send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type')
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_cors_headers()
+        self.end_headers()
+
+    def do_GET(self):
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query_params = parse_qs(parsed_url.query)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        response_data = {"error": "Endpoint not found"}
+        status_code = 404
+
+        try:
+            if path == "/api/read":
+                book = query_params.get("book", [None])[0]
+                chapter = query_params.get("chapter", [None])[0]
+                if book and chapter:
+                    cursor.execute("""
+                        SELECT * FROM verses 
+                        WHERE book = ? AND chapter = ?
+                        ORDER BY verse
+                    """, (book.upper(), int(chapter)))
+                    rows = cursor.fetchall()
+                    
+                    verses_list = []
+                    for r in rows:
+                        # Fetch cross refs count
+                        cursor.execute("SELECT count(*) FROM cross_references WHERE from_verse = ?", (r['id'],))
+                        cross_ref_count = cursor.fetchone()[0]
+                        
+                        # Fetch places count
+                        cursor.execute("SELECT count(*) FROM verse_geography WHERE verse_id = ?", (r['id'],))
+                        places_count = cursor.fetchone()[0]
+                        
+                        # Fetch commentaries
+                        cursor.execute("SELECT text FROM commentaries WHERE verse_id = ?", (r['id'],))
+                        commentary_rows = cursor.fetchall()
+                        commentaries = [c[0] for c in commentary_rows]
+                        
+                        verses_list.append({
+                            "id": r['id'], "book": r['book'], "chapter": r['chapter'], "verse": r['verse'],
+                            "text_en": r['text_en'], "text_original": r['text_original'],
+                            "text_hi": r['text_hi'], "text_te": r['text_te'],
+                            "text_ml": r['text_ml'], "text_ta": r['text_ta'],
+                            "cross_references_count": cross_ref_count,
+                            "places_count": places_count,
+                            "commentaries": commentaries
+                        })
+                    response_data = {"verses": verses_list}
+                    status_code = 200
+
+            elif path == "/api/search":
+                q = query_params.get("q", [""])[0]
+                book = query_params.get("book", [None])[0]
+                if q:
+                    if book:
+                        cursor.execute("""
+                            SELECT id, book, chapter, verse, text_en 
+                            FROM search_en 
+                            WHERE text_en MATCH ? AND book = ? 
+                            LIMIT 50
+                        """, (q, book.upper()))
+                    else:
+                        cursor.execute("""
+                            SELECT id, book, chapter, verse, text_en 
+                            FROM search_en 
+                            WHERE text_en MATCH ? 
+                            LIMIT 50
+                        """, (q,))
+                    rows = cursor.fetchall()
+                    response_data = {"results": [dict(r) for r in rows]}
+                    status_code = 200
+
+            elif path == "/api/verse":
+                verse_id = query_params.get("id", [""])[0]
+                if verse_id:
+                    cursor.execute("SELECT * FROM verses WHERE id = ?", (verse_id.upper(),))
+                    row = cursor.fetchone()
+                    if row:
+                        # Get commentaries
+                        cursor.execute("SELECT commentary_id, text FROM commentaries WHERE verse_id = ?", (verse_id.upper(),))
+                        comms = [dict(c) for c in cursor.fetchall()]
+                        
+                        # Get places
+                        cursor.execute("""
+                            SELECT gp.name, gp.latitude, gp.longitude, gp.type 
+                            FROM geography_places gp
+                            JOIN verse_geography vg ON gp.place_id = vg.place_id
+                            WHERE vg.verse_id = ?
+                        """, (verse_id.upper(),))
+                        places = [dict(p) for p in cursor.fetchall()]
+                        
+                        # Get timeline
+                        cursor.execute("""
+                            SELECT te.title, te.year, te.location, te.description 
+                            FROM timeline_events te
+                            JOIN event_verses ev ON te.event_id = ev.event_id
+                            WHERE ev.verse_id = ?
+                        """, (verse_id.upper(),))
+                        events = [dict(e) for e in cursor.fetchall()]
+                        
+                        # Get cross-references
+                        cursor.execute("""
+                            SELECT to_verse, votes FROM cross_references 
+                            WHERE from_verse = ? 
+                            ORDER BY votes DESC LIMIT 15
+                        """, (verse_id.upper(),))
+                        cross_refs = [dict(cr) for cr in cursor.fetchall()]
+                        
+                        response_data = {
+                            "verse": dict(row),
+                            "commentaries": comms,
+                            "places": places,
+                            "events": events,
+                            "cross_references": cross_refs
+                        }
+                        status_code = 200
+
+            elif path == "/api/lexicon":
+                q = query_params.get("q", [""])[0]
+                if q:
+                    cursor.execute("""
+                        SELECT strongs_id, lemma, definition 
+                        FROM lexicon_fts 
+                        WHERE lexicon_fts MATCH ? 
+                        LIMIT 30
+                    """, (q,))
+                    lex_rows = [dict(r) for r in cursor.fetchall()]
+                    
+                    cursor.execute("""
+                        SELECT name, definition_text 
+                        FROM dictionary_fts 
+                        WHERE dictionary_fts MATCH ? 
+                        LIMIT 30
+                    """, (q,))
+                    dict_rows = [dict(r) for r in cursor.fetchall()]
+                    
+                    response_data = {"lexicon": lex_rows, "dictionary": dict_rows}
+                    status_code = 200
+
+            elif path == "/api/topics":
+                q = query_params.get("q", [""])[0]
+                if q:
+                    cursor.execute("""
+                        SELECT subject, entry 
+                        FROM naves_fts 
+                        WHERE naves_fts MATCH ? 
+                        LIMIT 30
+                    """, (q,))
+                    rows = [dict(r) for r in cursor.fetchall()]
+                    response_data = {"topics": rows}
+                    status_code = 200
+
+            elif path == "/api/biography":
+                person_id = query_params.get("id", [""])[0]
+                if person_id:
+                    cursor.execute("SELECT * FROM people WHERE id = ?", (person_id,))
+                    person = cursor.fetchone()
+                    if not person:
+                        cursor.execute("SELECT * FROM people WHERE name LIKE ? LIMIT 1", (f"{person_id}%",))
+                        person = cursor.fetchone()
+                    
+                    if person:
+                        # Get relationships
+                        cursor.execute("""
+                            SELECT r.relationship_type, p.name AS relation_name, r.person_id_2 AS relation_id, r.verse_id 
+                            FROM relationships r
+                            JOIN people p ON r.person_id_2 = p.id
+                            WHERE r.person_id_1 = ?
+                        """, (person['id'],))
+                        relations = [dict(r) for r in cursor.fetchall()]
+                        
+                        # Get name meaning
+                        cursor.execute("SELECT meaning FROM bible_names_dictionary WHERE name = ?", (person['name'],))
+                        meaning_row = cursor.fetchone()
+                        meaning = meaning_row[0] if meaning_row else None
+                        
+                        response_data = {
+                            "profile": dict(person),
+                            "relationships": relations,
+                            "name_meaning": meaning
+                        }
+                        status_code = 200
+
+            elif path == "/api/chapter_map":
+                book = query_params.get("book", [None])[0]
+                chapter = query_params.get("chapter", [None])[0]
+                if book and chapter:
+                    cursor.execute("""
+                        SELECT DISTINCT gp.name, gp.latitude, gp.longitude, gp.type, vg.verse_id
+                        FROM geography_places gp
+                        JOIN verse_geography vg ON gp.place_id = vg.place_id
+                        JOIN verses v ON vg.verse_id = v.id
+                        WHERE v.book = ? AND v.chapter = ?
+                        ORDER BY vg.verse_id
+                    """, (book.upper(), int(chapter)))
+                    rows = [dict(r) for r in cursor.fetchall()]
+                    response_data = {"places": rows}
+                    status_code = 200
+
+            elif path == "/api/timeline":
+                cursor.execute("SELECT * FROM timeline_events ORDER BY year")
+                events = [dict(e) for e in cursor.fetchall()]
+                response_data = {"events": events}
+                status_code = 200
+
+        except Exception as e:
+            response_data = {"error": str(e)}
+            status_code = 500
+        finally:
+            conn.close()
+
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_cors_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps(response_data).encode('utf-8'))
+
+def start_http_server():
+    server = HTTPServer(('0.0.0.0', 5000), JSONAPIHandler)
+    print("Built-in HTTP JSON API Server running on port 5000...")
+    server.serve_forever()
+
 if __name__ == "__main__":
+    # Start the built-in HTTP server in a separate thread so it doesn't block stdio MCP transport
+    api_thread = threading.Thread(target=start_http_server, daemon=True)
+    api_thread.start()
+
+    # Start the MCP server
     mcp.run()
+
