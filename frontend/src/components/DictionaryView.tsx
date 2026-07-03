@@ -59,7 +59,7 @@ export default function DictionaryView() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder='Search Strong\'s, Easton\'s, Smith\'s, Nave\'s (e.g. "grace", "baptism")'
+              placeholder={"Search Strong's, Easton's, Smith's, Nave's (e.g. \"grace\", \"baptism\")"}
               className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm border outline-none"
               style={{
                 background: "var(--bg-surface-elevated)",
