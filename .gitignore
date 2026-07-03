@@ -7,3 +7,10 @@ backups/
 rhema.db
 rhema_base_v3.db
 rhema_nt_complete.db
+
+# Javascript / Node / Next.js ignores
+node_modules/
+.next/
+dist/
+.env*.local
+
