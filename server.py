@@ -1,0 +1,312 @@
+from mcp.server.fastmcp import FastMCP
+import sqlite3
+import json
+import os
+
+mcp = FastMCP("Rhema Study Engine")
+DB_PATH = os.path.join(os.path.dirname(__file__), "rhema.db")
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+@mcp.tool()
+def search_scriptures(query: str, book: str = None) -> str:
+    """
+    Search the English Bible text using full-text search (FTS5).
+    Optionally filter by book abbreviation (e.g. 'GEN', 'MAT').
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if book:
+            cursor.execute("""
+                SELECT id, book, chapter, verse, text_en 
+                FROM search_en 
+                WHERE text_en MATCH ? AND book = ? 
+                LIMIT 50
+            """, (query, book.upper()))
+        else:
+            cursor.execute("""
+                SELECT id, book, chapter, verse, text_en 
+                FROM search_en 
+                WHERE text_en MATCH ? 
+                LIMIT 50
+            """, (query,))
+        
+        rows = cursor.fetchall()
+        if not rows:
+            return f"No results found for query: '{query}'"
+        
+        results = []
+        for r in rows:
+            results.append(f"[{r['id']}] {r['text_en']}")
+        return "\n".join(results)
+    except Exception as e:
+        return f"Error executing search: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def get_verse_details(verse_id: str) -> str:
+    """
+    Retrieve comprehensive details for a specific verse ID (e.g. 'GEN.1.1' or 'MAT.1.1').
+    Includes all translations, commentary, linked places, timeline events, and cross-references.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Get translations
+        cursor.execute("SELECT * FROM verses WHERE id = ?", (verse_id.upper(),))
+        verse = cursor.fetchone()
+        if not verse:
+            return f"Verse '{verse_id}' not found in database."
+        
+        # Get commentaries
+        cursor.execute("SELECT commentary_id, text FROM commentaries WHERE verse_id = ?", (verse_id.upper(),))
+        commentaries = cursor.fetchall()
+        
+        # Get geocoded places
+        cursor.execute("""
+            SELECT gp.name, gp.latitude, gp.longitude, gp.type 
+            FROM geography_places gp
+            JOIN verse_geography vg ON gp.place_id = vg.place_id
+            WHERE vg.verse_id = ?
+        """, (verse_id.upper(),))
+        places = cursor.fetchall()
+        
+        # Get timeline events
+        cursor.execute("""
+            SELECT te.title, te.year, te.location, te.description 
+            FROM timeline_events te
+            JOIN event_verses ev ON te.event_id = ev.event_id
+            WHERE ev.verse_id = ?
+        """, (verse_id.upper(),))
+        events = cursor.fetchall()
+        
+        # Get cross-references
+        cursor.execute("""
+            SELECT to_verse, votes FROM cross_references 
+            WHERE from_verse = ? 
+            ORDER BY votes DESC LIMIT 10
+        """, (verse_id.upper(),))
+        cross_refs = cursor.fetchall()
+        
+        # Format output
+        output = []
+        output.append(f"=== Verse Details: {verse['id']} ===")
+        output.append(f"English (KJV): {verse['text_en']}")
+        output.append(f"Original Text (Hebrew/Greek): {verse['text_original']}")
+        output.append(f"Hindi: {verse['text_hi']}")
+        output.append(f"Telugu: {verse['text_te']}")
+        output.append(f"Malayalam: {verse['text_ml']}")
+        output.append(f"Tamil: {verse['text_ta']}")
+        output.append("")
+        
+        if commentaries:
+            output.append("--- Commentaries ---")
+            for c in commentaries:
+                output.append(f"[{c['commentary_id']}]: {c['text']}")
+            output.append("")
+            
+        if places:
+            output.append("--- Geography (Geocoded Places) ---")
+            for p in places:
+                output.append(f"- {p['name']} ({p['type']}) at Coordinates: ({p['latitude']}, {p['longitude']})")
+            output.append("")
+            
+        if events:
+            output.append("--- Chronological Timeline Events ---")
+            for e in events:
+                year_str = f"{abs(e['year'])} BC" if e['year'] < 0 else f"AD {e['year']}"
+                output.append(f"- {e['title']} ({year_str}) at {e['location']}: {e['description']}")
+            output.append("")
+            
+        if cross_refs:
+            output.append("--- Top Cross-References ---")
+            for cr in cross_refs:
+                output.append(f"- {cr['to_verse']} (votes: {cr['votes']})")
+            output.append("")
+            
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error retrieving verse details: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def search_dictionary_and_lexicon(query: str) -> str:
+    """
+    Search Easton's/Smith's Bible Dictionaries and Strong's Concordance Greek/Hebrew lexicon.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Search Dictionary FTS
+        cursor.execute("""
+            SELECT name, definition_text 
+            FROM dictionary_fts 
+            WHERE dictionary_fts MATCH ? 
+            LIMIT 15
+        """, (query,))
+        dict_rows = cursor.fetchall()
+        
+        # Search Strong's Lexicon FTS
+        cursor.execute("""
+            SELECT strongs_id, lemma, definition 
+            FROM lexicon_fts 
+            WHERE lexicon_fts MATCH ? 
+            LIMIT 15
+        """, (query,))
+        lex_rows = cursor.fetchall()
+        
+        output = []
+        if dict_rows:
+            output.append("=== Bible Dictionary Matches ===")
+            for r in dict_rows:
+                output.append(f"Term: {r['name']}")
+                output.append(f"Definition: {r['definition_text'][:300]}...")
+                output.append("-" * 30)
+            output.append("")
+            
+        if lex_rows:
+            output.append("=== Strong's Lexicon Matches ===")
+            for r in lex_rows:
+                output.append(f"Strong's ID: {r['strongs_id']} | Lemma: {r['lemma']}")
+                output.append(f"Definition: {r['definition']}")
+                output.append("-" * 30)
+            output.append("")
+            
+        if not output:
+            return f"No dictionary or lexicon matches found for: '{query}'"
+            
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error executing lookup: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def search_topics(query: str) -> str:
+    """
+    Search subjects and entries in Nave's Topical Index.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT subject, entry 
+            FROM naves_fts 
+            WHERE naves_fts MATCH ? 
+            LIMIT 15
+        """, (query,))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return f"No topical matches found in Nave's Index for: '{query}'"
+            
+        output = []
+        output.append("=== Nave's Topical Index Matches ===")
+        for r in rows:
+            output.append(f"Subject: {r['subject']}")
+            output.append(f"Entry References: {r['entry']}")
+            output.append("-" * 40)
+            
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error executing topical search: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def get_biography(person_id: str) -> str:
+    """
+    Retrieve biographical profile, unique attributes, and family relationships for a person ID (e.g. 'Adam_1', 'David_1').
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Get person profile
+        cursor.execute("SELECT * FROM people WHERE id = ?", (person_id,))
+        person = cursor.fetchone()
+        if not person:
+            # Try searching by name case-insensitive
+            cursor.execute("SELECT * FROM people WHERE name LIKE ? LIMIT 1", (f"{person_id}%",))
+            person = cursor.fetchone()
+            if not person:
+                return f"Person '{person_id}' not found in database."
+        
+        # Get relationships
+        cursor.execute("""
+            SELECT r.relationship_type, p.name AS relation_name, r.person_id_2 AS relation_id, r.verse_id 
+            FROM relationships r
+            JOIN people p ON r.person_id_2 = p.id
+            WHERE r.person_id_1 = ?
+        """, (person['id'],))
+        relations = cursor.fetchall()
+        
+        # Get Hitchcock name meaning if matches
+        cursor.execute("SELECT meaning FROM bible_names_dictionary WHERE name = ?", (person['name'],))
+        name_meaning = cursor.fetchone()
+        
+        output = []
+        output.append(f"=== Biographical Profile: {person['name']} ===")
+        output.append(f"ID: {person['id']}")
+        output.append(f"Sex: {person['sex']}")
+        if person['tribe']:
+            output.append(f"Tribe: {person['tribe']}")
+        if person['unique_attribute']:
+            output.append(f"Attribute: {person['unique_attribute']}")
+        if person['notes']:
+            output.append(f"Notes: {person['notes']}")
+        if name_meaning:
+            output.append(f"Name Meaning (Hitchcock's): {name_meaning['meaning']}")
+        output.append("")
+        
+        if relations:
+            output.append("--- Family & Social Relationships ---")
+            for r in relations:
+                ref_str = f" in {r['verse_id']}" if r['verse_id'] else ""
+                output.append(f"- {person['name']} is the {r['relationship_type']} of {r['relation_name']} ({r['relation_id']}){ref_str}")
+                
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error retrieving biography: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def get_chapter_map_data(book: str, chapter: int) -> str:
+    """
+    Retrieve geocoded coordinates and place names mentioned in a specific book and chapter (e.g. book='GEN', chapter=12).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Fetch places in chapter
+        cursor.execute("""
+            SELECT DISTINCT gp.name, gp.latitude, gp.longitude, gp.type, vg.verse_id
+            FROM geography_places gp
+            JOIN verse_geography vg ON gp.place_id = vg.place_id
+            JOIN verses v ON vg.verse_id = v.id
+            WHERE v.book = ? AND v.chapter = ?
+            ORDER BY vg.verse_id
+        """, (book.upper(), chapter))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return f"No geocoded places found in {book.upper()} chapter {chapter}."
+            
+        output = []
+        output.append(f"=== Geocoded Places in {book.upper()} Chapter {chapter} ===")
+        for r in rows:
+            output.append(f"[{r['verse_id']}] {r['name']} ({r['type']}) at Coordinates: ({r['latitude']}, {r['longitude']})")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error retrieving chapter maps: {e}"
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    mcp.run()

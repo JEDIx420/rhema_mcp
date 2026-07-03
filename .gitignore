@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+backups/
+# Ignore the active SQLite database to prevent binary bloat and GitHub file size limit blocks
+rhema.db
+rhema_base_v3.db
+rhema_nt_complete.db
