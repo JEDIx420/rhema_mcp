@@ -6,151 +6,139 @@ This document serves as the comprehensive design and interactive behavior manual
 
 ## 🎨 1. Design System & Style Tokens (zenrev aesthetics)
 
-### CSS Variables & Tailored HSL Theme
+### CSS Variables & HSL Theme (Sleek High-Contrast Light/Soft Base)
 ```css
 :root {
-  /* HSL Tailored Palettes - Sleek Command Center Dark Mode */
-  --bg-base: hsl(220, 15%, 8%);         /* Main backdrop */
-  --bg-surface: hsl(220, 12%, 14%);     /* Cards, sidebars, panes */
-  --bg-surface-elevated: hsl(220, 10%, 20%); /* Popovers, tooltips */
+  /* HSL Tailored Palettes - Sleek Command Center White/Slate Light Mode Base */
+  --bg-base: #f8fafc;                   /* Slate-50 background */
+  --bg-surface: #ffffff;               /* Crisp pure white for cards, sidebars, panes */
+  --bg-surface-elevated: #ffffff;      /* Modal popovers, hover cards */
   
-  --border-subtle: hsl(220, 12%, 22%);  /* Pane dividers */
-  --border-focus: hsl(142, 70%, 45%);   /* Active focus rings */
+  --border-subtle: #e2e8f0;            /* Slate-200 dividers and borders */
+  --border-hover: #cbd5e1;             /* Slate-300 active hover borders */
+  --border-focus: rgba(37, 99, 235, 0.5); /* Royal Blue focus glow */
   
-  --primary: hsl(142, 70%, 45%);        /* Emerald - Success, active states */
-  --primary-hover: hsl(142, 75%, 55%);
-  --secondary: hsl(200, 80%, 60%);      /* Cyan - Secondary actions, timeline */
-  --accent: hsl(280, 75%, 65%);         /* Purple - Lexicon and Strong's links */
+  --primary: #2563eb;                  /* Royal Blue - Active states, highlight borders */
+  --primary-hover: #1d4ed8;            /* Deep Blue */
+  --secondary: #0ea5e9;                /* Sky Blue - secondary buttons, location badges */
+  --accent: #7c3aed;                   /* Purple - Lexicon codes, Strong's indexes */
   
-  --text-primary: hsl(0, 0%, 95%);
-  --text-muted: hsl(220, 8%, 65%);
-  --text-accent: hsl(142, 80%, 75%);
+  --text-primary: #0f172a;             /* Slate-900 for high-readability headings */
+  --text-secondary: #334155;           /* Slate-700 for main prose and body text */
+  --text-muted: #64748b;               /* Slate-500 for captions, labels, subtitles */
   
   /* Glassmorphism settings */
   --glass-blur: blur(16px);
-  --glass-opacity: rgba(20, 24, 33, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-opacity: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(15, 23, 42, 0.06);
 }
 ```
 
 ### Typography Settings
-*   **Interface controls**: `font-family: 'Outfit', sans-serif;` (weight 400 for text, 600 for headings/buttons).
-*   **Scripture columns**: `font-family: 'Inter', sans-serif;` (optimal tracking and line height `1.75` for dense reading).
-*   **Hebrew/Greek scripts**: `font-family: 'SBL Hebrew', 'SBL Greek', 'Noto Serif Hebrew', serif;` (proper rendering of diacritics and vowel points).
+*   **Interface Controls**: `font-family: var(--font-outfit), sans-serif;` (weights: 400 Medium, 600 SemiBold, 800 ExtraBold). Used for headings, nav items, and action buttons.
+*   **Scripture Columns**: `font-family: var(--font-inter), sans-serif;` (weights: 400 Regular, 500 Medium). Default base size starts at `17px` with a line-height of `1.75` for high-density, comfortable reading.
+*   **Hebrew/Greek scripts**: `font-family: 'SBL Hebrew', 'SBL Greek', 'Noto Serif Hebrew', serif;` with appropriate right-to-left direction properties for WLC Hebrew text.
 
 ---
 
 ## 🖥️ 2. Screen Anatomy & Layout Framework
 
-The application is structured into a persistent 3-column layout that shifts dynamically depending on viewport constraints and active overlays.
+The application is structured into a persistent sidebar navigation and a primary dynamic workspace main panel.
 
 ```
-+-------------------------------------------------------------------------------------------------------+
-|  [SB]  |  [Header Bar: Book Selector | Cmd+K Launcher | Connection Status]               |  [LD]      |
-|  - H   |---------------------------------------------------------------------------------|  (Slides   |
-|  - R   |  [Interlinear Reading Desk - Verses Columns]                                    |   out on   |
-|  - M   |  +--------------------+--------------------+--------------------+---------------+   word     |
-|  - T   |  | Column 1: English  | Column 2: Hebrew   | Column 3: Hindi    | Col 4: Malayalam  click)  |
-|  - S   |  |                    |                    |                    |               |            |
-|  - B   |  | [GEN.1.1] In the   | [GEN.1.1] בְּרֵאשִׁ֖ית | आदि में परमेश्वर..  | ആദിയിൽ ദൈവം.. | [H7225]    |
-|        |  | beginning...       | בָּרָ֣א...          |                    |               | resheet    |
-|        |  +--------------------+--------------------+--------------------+---------------+            |
-|        |                                                                                 | "beginning"|
-|        |  [Bottom Tab Deck: Chronological Timeline Slider | Geography Map Canvas]       |            |
-+------------------------------------------------------------------------------------------+------------+
++---------------------------------------------------------------------------------------------------------------+
+| [SB]   |  [Reading Desk Top Bar: Prev/Next Chapter | Book Chapter Selector Modal Button | Translation Pills]  |
+| H-16   |------------------------------------------------------------------------------------------------------|
+| logo   |  [Interlinear Reading Desk - Verses Columns]                                                         |
+| ------ |  +-------------------------+-------------------------+-------------------------+---------------------+
+| [Read] |  | Column 1: English (KJV)  | Column 2: Original Grk  | Column 3: Hindi         | Col 4: Malayalam    |
+| [Srch] |  | [GEN.1.1] In the        | [GEN.1.1] בְּרֵאשִׁ֖ית  | आदि में परमेश्वर ने     | ആദിയിൽ ദൈവം ആകാശവും |
+| [Maps] |  | beginning...            | בָּרָ֣א אֱלֹהִ֑ים...     |                         |                     |
+| [Time] |  +-------------------------+-------------------------+-------------------------+---------------------+
+| [Peop] |  [Exegesis Slide-out Drawer: Selected Verse Details | Commentary Paragraphs | Cross-References]      |
+| [Dict] |                                                                                                      |
++--------+------------------------------------------------------------------------------------------------------+
 ```
 
 ### Screen 1: Persistent Sidebar (SB)
-*   **Width**: Fixed `64px` (collapsed icon-only state) or `220px` (expanded text list).
-*   **Icons & Actions**:
-    *   `Home` (Dashboard overview, study streaks, quick resume).
-    *   `Read` (Interlinear reading desk desk).
-    *   `Map` (GIS Geocoding mapping explorer).
-    *   `Timeline` (Chronological timeline slider and event list).
-    *   `Genealogy` (Biographical profiling and family tree canvas).
-    *   `Dictionary` (Nave's / Easton's / Smith's dictionary lookup desk).
-    *   `Settings` (Server sync, translation downloads, backup management).
+*   **Visual Behavior**: Uses Framer Motion to animate dynamically between a collapsed width of `64px` and an expanded width of `220px` when hovered.
+*   **Spacings & Alignment**:
+    *   **Collapsed State**: Icons are perfectly centered (`justify-center px-0 py-3`) within the `64px` column to eliminate off-center alignment.
+    *   **Expanded State**: Icons align left alongside text labels (`justify-start px-3.5 gap-3.5 py-3`) for a structured look.
+*   **Buttons (Top to Bottom)**:
+    1.  `Brand Header`: Shows logo pill `rh` and title `Rhema` strictly aligned to the 64px/h-16 header line.
+    2.  `Read`: Navigates to interlinear Scripture reading columns.
+    3.  `Search`: Accesses Scripture full-text keyword indexing pane.
+    4.  `Maps`: Opens GIS ancient geography location visualizer.
+    5.  `Timeline`: Traces historical events with visual chronological scrollers.
+    6.  `People`: Focuses on biographical relationships and SVG pedigree tree maps.
+    7.  `Dictionary`: Combined Easton's, Smith's, Hitchcock's, and Nave's topical search desks.
+    8.  `Settings`: Aligned to the bottom footer; manages servers and translation states.
 
 ---
 
-## 📖 3. Interactive Components Specification
+## 📖 3. Detailed Page-by-Page Components
 
-### A. The Interlinear Reading Desk
-*   **Column Customizer**: A top-bar dropdown allowing users to toggle visible columns (KJV English, Hebrew WLC / Greek MorphGNT, Hindi, Malayalam, Tamil, Telugu).
-*   **Word-Level Hovering**:
-    *   Hovering over any Hebrew/Greek word adds a subtle border highlight: `box-shadow: 0 0 0 1px var(--primary)` and scales the text by `1.02`.
-    *   Displays a lightweight inline tooltip showing the transliterated word and basic Strong's root definition.
-    *   Clicking the word locks the **Lexicon Drawer** open on the right pane.
-*   **Verse Actions Context Menu**:
-    *   Clicking a verse number (e.g. `[GEN.1.1]`) displays a floating overlay options bubble:
-        1.  `Copy Verse Reference`
-        2.  `View Matthew Henry Commentary` (opens bottom pane).
-        3.  `Find Cross-References` (animates in a localized force graph overlay).
-        4.  `Map Geography` (highlights linked locations on the GIS map).
-
-### B. Lexicon Drawer (LD)
-*   **Location**: Right edge, fixed width `320px`.
-*   **Anatomy**:
-    *   **Header**: Strong's code (e.g. `H7225`), Lemma (`רֵאשִׁית`), Transliteration (`re'shiyth`), Pronunciation audio trigger icon.
-    *   **Definition Panel**: Full dictionary entry and semantic categories.
-    *   **Occurrences Map**: List of other verses where this lemma occurs, with one-click navigation links.
-
-### C. Bottom Tab Deck (Chronology & Maps)
-*   **Mapbox/Leaflet GIS Map**:
-    *   Coordinates dynamically sync with the currently active reading desk chapter.
-    *   Pins are animated on entry (drop-down with spring rebound).
-    *   Hovering a pin draws a dotted vector line to the verses in the chapter referencing it.
-*   **Timeline Slider**:
-    *   A horizontal scrub rail. Dragging the handle moves chronologically through biblical history.
-    *   As the slider moves, it snaps to major event nodes (e.g., `Exodus`, `Babylonian Captivity`, `Birth of Christ`), updating the Scripture desk to the primary corresponding references automatically.
+### A. The Interlinear Reading Desk (`ReadingDesk.tsx`)
+The primary interlinear alignment station, displaying scriptures in side-by-side translation columns:
+1.  **Top Header Bar**:
+    *   `Prev/Next Chapter Buttons`: Chevron left/right arrows (`p-1.5 rounded hover:bg-slate-100`) for step navigation.
+    *   `Book Selector Button`: Displays `[BookName] [ChapterNumber]` (e.g. *Genesis 1*) as a clickable pill button with `BookOpen` and `ChevronDown` icons. Triggers the [BookChapterPickerModal](file:///Users/vincyvincent/rhema_mcp/frontend/src/components/BookChapterPickerModal.tsx).
+    *   `Text Sizer Widget`: Offers `-` / `+` font scaling options. Default sizing initialized at `17px` for enhanced legibility.
+    *   `Translation Pills`: Staggered flex buttons (`gap-2.5`) corresponding to English, Original (Hebrew/Greek), Hindi, Telugu, Malayalam, and Tamil translations. Active states show as solid blue text with a soft blue backdrop (`rgba(37, 99, 235, 0.08)`).
+2.  **Verses Pane**:
+    *   `Multilingual Columns Grid`: Dynamically fits columns based on the enabled translations count.
+    *   `Bidirectional Highlights (Vowel-Tolerant)`: Clicking or hovering over an English word automatically highlights the corresponding Hebrew/Greek word in the Original column. Employs a custom consonantal root extraction algorithm (`stripVowels()`) to bypass spelling differences and grammatical prefixes (`w`, `h`, `b`, `l`, `k`, `m`), yielding instant matching.
+    *   `Original Lexicon Click Modal`: Clicking an original Hebrew or Greek word opens a detailed popover modal containing:
+        *   Strongs ID, Lemma, and phonetic English pronunciation guide (e.g., *Pronunciation: tehom*).
+        *   Un-truncated dictionary definitions in a scrollable serif text card.
+3.  **Exegesis Drawer (Right Panel)**:
+    *   Slides out on verse select. Features tabs for `Verse Info` (detailed morphology, geocoded locations, and cross-reference links with vote counts) and `Commentary` (full Matthew Henry commentary paragraphs).
 
 ---
 
-## 🔎 4. Command Center Overlay (Cmd+K / Ctrl+K Launcher)
-
-Pressing `Cmd+K` or `Ctrl+K` triggers a system-wide modal launcher utilizing glassmorphic backdrop filters.
-
-```
-+-------------------------------------------------------------+
-|  /search covenant                                           |
-+-------------------------------------------------------------+
-|  Recent Searches:                                           |
-|    - Genesis 12 (Go to Chapter)                             |
-|    - "tabernacle" in Exodus (FTS search)                    |
-|  Tools:                                                     |
-|    - Open Map Pane                                          |
-|    - Look up "Abraham" (Genealogy profile)                  |
-+-------------------------------------------------------------+
-```
-
-### Commands Supported:
-*   `/read [ref]` (e.g., `/read Gen 1:1`) - Instantly moves the reading desk columns to the selection.
-*   `/find [query]` - Performs FTS5 scriptural search.
-*   `/dict [term]` - Performs Easton/Smith dictionary search.
-*   `/bio [name]` - Opens biographical family relationships card.
-*   `/mcp [tool]` - Dev-console command to invoke raw MCP tools.
+### B. Book & Chapter Picker Modal (`BookChapterPickerModal.tsx`)
+A centered, focus-stealing overlay replacing cramped inline dropdown menus:
+*   **Modal Overlay**: Features a semi-transparent slate backdrop (`bg-slate-900/40`) with high-fidelity blur (`backdrop-blur-xs`) and an absolute depth of `z-[9999]` to render above external Leaflet GIS map panes.
+*   **Book Picker Screen**: Displays Old Testament and New Testament books segmented in a responsive 4-column grid. Currently active books show a soft blue highlight border.
+*   **Chapter Selector Screen**: Clicking any book transitions the modal into a grid of chapters (e.g., chapters 1-50 for Genesis) using exact scripture counts. Features a `ChevronLeft` back trigger to return to the book grid.
 
 ---
 
-## ⚡ 5. Micro-Animations & Framer Motion States
+### C. GIS Geography Map View (`MapView.tsx`)
+An interactive geographical interface displaying historical places mentioned in scripture:
+*   **Sidebar Control**: Features a clickable header banner: `Current Context: [Book] [Chapter]`. Clicking the banner opens the `BookChapterPickerModal`, enabling direct chapter navigation within the Maps view.
+*   **Places List Panel**: Enumerates all geocoded places mapped to the current chapter. Hovering/clicking a place name auto-centers the Leaflet map onto its coordinates.
+*   **Leaflet Map Canvas**: Features a full-screen geographical layer. Mapped pins drop into coordinates with dynamic spring animations. Floating tooltips render corresponding verse references on hover.
 
-```javascript
-// Sidebar Drawer Animation
-export const sidebarVariants = {
-  expanded: { width: 220, transition: { duration: 0.25, ease: "easeOut" } },
-  collapsed: { width: 64, transition: { duration: 0.2, ease: "easeIn" } }
-};
+---
 
-// Lexicon Drawer Slide-In
-export const lexiconDrawerVariants = {
-  open: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 260, damping: 26 } },
-  closed: { x: "100%", opacity: 0, transition: { duration: 0.2 } }
-};
+### D. Chronological Timeline View (`TimelineView.tsx`)
+A visual historical dashboard charting events across scripture:
+*   **Horizontal Visual Track**: A scrollable horizontal track representing timeline events. Each event displays as a visual circular dot connected by a continuous horizontal rule.
+*   **Milestone Bubbles**: Displays floating, colored year tags (e.g. *2000 BC*) above event nodes, and event titles and locations below.
+*   **2-Column Lower Dashboard**:
+    *   **Left Details Column (60% width)**: Renders a card displaying the selected event's title, location, narrative description, and a flex list of clickable scripture references. Clicking any reference navigates the user back to the Reading Desk at that verse.
+    *   **Right Chronology Checklist (40% width)**: A scrollable, vertical list of all events sorted chronologically, serving as an index to quickly select and focus milestones.
 
-// Page View Transitions (Router level)
-export const pageVariants = {
-  initial: { opacity: 0, y: 15 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  exit: { opacity: 0, y: -15, transition: { duration: 0.2 } }
-};
-```
+---
+
+### E. Genealogical Lineage View (`GenealogyView.tsx`)
+Renders interactive biographical relationship nodes:
+*   **Left Sidebar Biography**: Features a prominent input box to search characters (e.g. *David*). Displays name meanings, gender (fixed mapping check resolving startsWith("m") to *Male* and startsWith("f") to *Female*), tribal lineages, attributes, and biography notes.
+*   **Right SVG Graph Canvas**: Renders family trees in a `viewBox="0 0 600 500"` layout.
+    *   **Spouses**: Staggered vertically on alternating offsets above/below the central node line to prevent collision with children.
+    *   **Children**: Arranged along a bottom row using a dynamic step-width calculation (`Math.min(110, 480 / (count - 1))`) that fits all children on-screen without canvas overflows.
+
+---
+
+### F. Search & Dictionary Views
+*   **Prominent Input Areas**: Both views center their search bars inside spacious containers (`p-8 bg-slate-50/40`).
+*   **Sizing & Styling**: Search inputs use `text-base py-4 pl-14 pr-28` sizing with a `Search` button positioned relative right, creating a prominent card interface with subtle dropshadows.
+
+---
+
+### G. Command Center Launcher (`CommandCenter.tsx`)
+*   **Input Trigger**: Activated via `Cmd+K` or `Ctrl+K` globally.
+*   **Backdrop**: Backdrop blur overlay spanning the whole viewport.
+*   **Syntax Actions**: Matches `/read [ref]`, `/find [keyword]`, `/dict [term]`, and `/bio [person]` inputs to instantly trigger corresponding state transitions in the main views.
