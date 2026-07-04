@@ -44,7 +44,12 @@ export default function Home() {
           />
         );
       case "search":
-        return <SearchView />;
+        return (
+          <SearchView
+            onNavigate={handleNavigate}
+            onViewChange={setActiveView}
+          />
+        );
       case "dictionary":
         return <DictionaryView />;
       case "map":

@@ -6,9 +6,17 @@ export async function fetchChapter(book: string, chapter: number) {
   return res.json();
 }
 
-export async function searchScriptures(query: string, book?: string) {
+export async function searchScriptures(
+  query: string,
+  filters?: { book?: string; testament?: string; sort?: string; page?: number; limit?: number }
+) {
   const params = new URLSearchParams({ q: query });
-  if (book) params.set("book", book);
+  if (filters?.book) params.set("book", filters.book);
+  if (filters?.testament) params.set("testament", filters.testament);
+  if (filters?.sort) params.set("sort", filters.sort);
+  if (filters?.page) params.set("page", String(filters.page));
+  if (filters?.limit) params.set("limit", String(filters.limit));
+
   const res = await fetch(`${API_BASE}/api/search?${params}`);
   if (!res.ok) throw new Error("Failed to search");
   return res.json();

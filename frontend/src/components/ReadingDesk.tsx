@@ -15,10 +15,12 @@ import {
   Volume2,
   Copy,
   ExternalLink,
+  Check,
 } from "lucide-react";
 import { fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
+import StudyPane from "./StudyPane";
 
 interface Verse {
   id: string;
@@ -355,15 +357,11 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   // Exegesis Drawer States
   const [selectedVerse, setSelectedVerse] = useState<VerseDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [activeTab, setActiveTab] = useState<"verse" | "lexicon">("verse");
   const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const [studyInitialTab, setStudyInitialTab] = useState<"verse" | "lexicon">("verse");
+  const [studyInitialWord, setStudyInitialWord] = useState<string | null>(null);
 
-  // Lexicon States
-  const [lexiconData, setLexiconData] = useState<any[]>([]);
-  const [lexiconLoading, setLexiconLoading] = useState(false);
-  const [occurrences, setOccurrences] = useState<any[]>([]);
-  const [occurrencesLoading, setOccurrencesLoading] = useState(false);
-  const [activeLexiconWord, setActiveLexiconWord] = useState<string | null>(null);
+  // Modal Lexicon state (used when clicking word from reader body)
   const [selectedLexiconModalWord, setSelectedLexiconModalWord] = useState<any | null>(null);
 
   // Interaction UI States
@@ -389,8 +387,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     queueMicrotask(() => {
       if (!cancelled) {
         setFetchState({ status: "loading" });
-        setSelectedVerse(null);
-        setActiveLexiconWord(null);
+        if (!props.selectedVerseId) {
+          setSelectedVerse(null);
+        }
       }
     });
 
@@ -435,7 +434,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     try {
       const data = await fetchVerseDetails(verseId);
       setSelectedVerse(data);
-      setActiveTab("verse");
+      setStudyInitialTab("verse");
     } catch {
       // ignore
     } finally {
@@ -566,26 +565,17 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   const handleOriginalWordClick = async (word: string, lemma?: string) => {
     const query = lemma || word;
-    setActiveLexiconWord(query);
-    setActiveTab("lexicon");
-    setLexiconLoading(true);
-    setOccurrencesLoading(true);
+    setStudyInitialWord(query);
+    setStudyInitialTab("lexicon");
 
     try {
       const data = await lookupLexicon(query);
       const results = data.results || [];
-      setLexiconData(results);
       if (results.length > 0) {
         setSelectedLexiconModalWord(results[0]);
       }
-
-      const occData = await fetchOccurrences(query);
-      setOccurrences(occData.occurrences || []);
     } catch (e) {
       console.error(e);
-    } finally {
-      setLexiconLoading(false);
-      setOccurrencesLoading(false);
     }
   };
 
@@ -610,7 +600,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                   handleOriginalWordMouseEnter(e, m.word, m.lemma, m.pos, m.parse)
                 }
                 onMouseLeave={handleOriginalWordMouseLeave}
-                onClick={() => handleOriginalWordClick(m.word, m.lemma)}
+                onClick={() => {
+                  handleVerseClick(v.id);
+                  handleOriginalWordClick(m.word, m.lemma);
+                }}
                 className="inline-block rounded px-0.5 transition-all duration-150 cursor-pointer font-serif select-none"
                 style={{
                   color: isHovered ? "var(--primary)" : "var(--text-primary)",
@@ -644,7 +637,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 key={idx}
                 onMouseEnter={(e) => handleOriginalWordMouseEnter(e, cleanWord)}
                 onMouseLeave={handleOriginalWordMouseLeave}
-                onClick={() => handleOriginalWordClick(cleanWord)}
+                onClick={() => {
+                  handleVerseClick(v.id);
+                  handleOriginalWordClick(cleanWord);
+                }}
                 className="inline-block rounded px-0.5 transition-all duration-150 cursor-pointer select-none"
                 style={{
                   color: isHovered ? "var(--primary)" : "var(--text-primary)",
@@ -767,7 +763,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           >
             <ChevronLeft size={18} />
           </button>
-
+ 
           {/* Book Selector */}
           <div>
             <button
@@ -785,7 +781,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
             </button>
           </div>
-
+ 
           <button
             onClick={() => navigateChapter(1)}
             className="p-1.5 rounded-md hover:bg-white/5 transition-colors cursor-pointer"
@@ -793,10 +789,58 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           >
             <ChevronRight size={18} />
           </button>
-        </div>
 
-        {/* Text Sizer & Translation Toggles */}
-        <div className="flex items-center gap-4">
+          {/* Vertical Divider */}
+          <div className="w-px h-5 bg-slate-200 mx-1" />
+ 
+          {/* Languages Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowLangDropdown(!showLangDropdown)}
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-base font-medium text-slate-800 cursor-pointer transition-colors shadow-sm font-sans"
+              style={{ fontFamily: "var(--font-outfit), sans-serif" }}
+            >
+              <span>Languages</span>
+              <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${showLangDropdown ? "rotate-180" : ""}`} />
+            </button>
+            <AnimatePresence>
+              {showLangDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute left-0 mt-3 min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-xl p-2 z-50 flex flex-col gap-1"
+                  >
+                    {enabledTranslations.map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => toggleTranslation(t.key)}
+                        className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors text-left font-sans"
+                      >
+                        <span
+                          className={`text-base transition-colors ${
+                            t.enabled ? "text-[var(--primary)] font-semibold" : "text-slate-700"
+                          }`}
+                        >
+                          {t.label}
+                        </span>
+                        {t.enabled && (
+                          <Check size={18} className="text-[var(--primary)] shrink-0" strokeWidth={2.5} />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+ 
+        {/* Text Sizer */}
+        <div className="flex items-center gap-4 mr-4">
           {/* Font Sizer */}
           <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
             <button
@@ -816,50 +860,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             >
               A+
             </button>
-          </div>
-
-          {/* Vertical Divider */}
-          <div className="w-px h-5 bg-slate-200" />
-
-          {/* Languages Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowLangDropdown(!showLangDropdown)}
-              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 cursor-pointer transition-colors shadow-xs font-sans"
-            >
-              <span>Languages</span>
-              <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${showLangDropdown ? "rotate-180" : ""}`} />
-            </button>
-            <AnimatePresence>
-              {showLangDropdown && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-lg p-2.5 z-50 flex flex-col gap-1"
-                  >
-                    {enabledTranslations.map((t) => (
-                      <button
-                        key={t.key}
-                        onClick={() => toggleTranslation(t.key)}
-                        className="flex items-center justify-between w-full px-3.5 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer font-sans"
-                      >
-                        <span className={`text-xs font-semibold ${t.enabled ? "text-blue-600 font-bold" : "text-slate-700"}`}>{t.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={t.enabled}
-                          readOnly
-                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
-                        />
-                      </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -977,293 +977,38 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "100%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="w-[450px] border border-slate-200 overflow-hidden flex flex-col shrink-0 bg-white shadow-md my-4 mr-4 rounded-2xl"
+              className="w-[450px] border border-slate-200 overflow-hidden flex flex-col shrink-0 bg-white shadow-md my-4 mr-4 rounded-2xl animate-none"
             >
-              {/* Drawer Tab Headers */}
-              <div className="flex border-b border-slate-200 text-base font-semibold bg-slate-50">
+              <div className="flex border-b border-slate-200 text-sm font-semibold bg-slate-50 justify-between items-center shrink-0 pr-4">
+                <span className="pl-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Exegesis Study</span>
                 <button
-                  onClick={() => setActiveTab("verse")}
-                  className={`flex-1 py-4 text-center transition-all cursor-pointer border-b-2 font-sans ${
-                    activeTab === "verse" 
-                      ? "text-blue-600 border-blue-600 font-bold" 
-                      : "text-slate-500 border-transparent hover:text-slate-800"
-                  }`}
-                  style={{ color: activeTab === "verse" ? "#2563eb" : undefined, borderColor: activeTab === "verse" ? "#2563eb" : undefined }}
+                  onClick={() => {
+                    setSelectedVerse(null);
+                    setStudyInitialWord(null);
+                    setStudyInitialTab("verse");
+                  }}
+                  className="p-2 hover:text-red-500 transition-colors cursor-pointer rounded-full hover:bg-slate-100"
                 >
-                  VERSE STUDY
-                </button>
-                {activeLexiconWord && (
-                  <button
-                    onClick={() => setActiveTab("lexicon")}
-                    className={`flex-1 py-4 text-center transition-all cursor-pointer border-b-2 font-sans ${
-                      activeTab === "lexicon" 
-                        ? "text-purple-600 border-purple-600 font-bold" 
-                        : "text-slate-500 border-transparent hover:text-slate-800"
-                    }`}
-                    style={{ color: activeTab === "lexicon" ? "#7c3aed" : undefined, borderColor: activeTab === "lexicon" ? "#7c3aed" : undefined }}
-                  >
-                    LEXICON
-                  </button>
-                )}
-                <button
-                  onClick={() => setSelectedVerse(null)}
-                  className="px-5 hover:text-red-500 transition-colors border-l border-slate-200 cursor-pointer"
-                >
-                  <X size={18} />
+                  <X size={16} />
                 </button>
               </div>
-
-              {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {activeTab === "verse" && (
-                  <>
-                    <h3 className="text-lg font-bold mb-4 font-sans text-slate-900">
-                      {selectedVerse.verse.id} Study Pane
-                    </h3>
-
-                    {/* Commentary */}
-                    {selectedVerse.commentaries.length > 0 ? (
-                      <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2.5 text-slate-500 font-sans">
-                          Matthew Henry Commentary
-                        </h4>
-                        {selectedVerse.commentaries.map((c, i) => (
-                          <div
-                            key={i}
-                            className="text-[17px] leading-relaxed p-5 rounded-2xl mb-3 border border-slate-200 bg-slate-50 text-slate-700 font-prose whitespace-pre-line"
-                          >
-                            {c.text}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm italic p-5 text-center text-slate-500 font-sans">
-                        No commentaries available for this verse.
-                      </div>
-                    )}
-
-                    {/* Cross References */}
-                    {selectedVerse.cross_references.length > 0 && (
-                      <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                          Theological Cross References
-                        </h4>
-                        <div className="flex flex-col gap-4">
-                          {selectedVerse.cross_references.map((cr) => (
-                            <div
-                              key={cr.to_verse}
-                              className="p-5 rounded-2xl border border-slate-200 bg-white shadow-xs flex flex-col gap-2.5"
-                            >
-                              <div className="flex items-center justify-between w-full">
-                                <button
-                                  onClick={() => handleVerseClick(cr.to_verse)}
-                                  className="font-bold text-blue-600 hover:underline cursor-pointer text-left text-base font-sans"
-                                >
-                                  {cr.to_verse}
-                                </button>
-                                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                                  {cr.votes} votes
-                                </span>
-                              </div>
-                              <p className="text-[17px] leading-relaxed text-slate-700 italic font-prose">
-                                &ldquo;{cr.text_en || "Verse text not available"}&rdquo;
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Places */}
-                    {selectedVerse.places.length > 0 && (
-                      <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                          Geocoded Locations
-                        </h4>
-                        <div className="flex flex-col gap-3">
-                          {selectedVerse.places.map((p, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-3 p-4 rounded-xl text-base border border-slate-200 bg-white shadow-xs"
-                            >
-                              <MapPin size={16} className="text-purple-500 shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <span className="font-bold text-slate-900 font-sans block truncate">{p.name}</span>
-                                <span className="text-xs block text-slate-500 font-sans truncate">{p.type}</span>
-                              </div>
-                              <span className="ml-auto font-mono text-xs text-slate-400 shrink-0">
-                                {p.latitude.toFixed(2)}, {p.longitude.toFixed(2)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Timeline Events */}
-                    {selectedVerse.events.length > 0 && (
-                      <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                          Chronological Events
-                        </h4>
-                        {selectedVerse.events.map((e, i) => (
-                          <div
-                            key={i}
-                            className="p-5 rounded-2xl mb-3 border border-slate-200 bg-white shadow-xs"
-                          >
-                            <div className="text-base font-bold text-slate-900 font-sans">{e.title}</div>
-                            <div className="text-xs text-blue-600 font-bold mt-1 font-sans">
-                              Year {e.year < 0 ? `${Math.abs(e.year)} BC` : `AD ${e.year}`} • {e.location}
-                            </div>
-                            {e.description && (
-                              <p className="text-[17px] leading-relaxed text-slate-700 mt-2 bg-slate-50 p-4 rounded-xl border border-slate-200 font-prose">{e.description}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === "lexicon" && activeLexiconWord && (() => {
-                  const morphWords = selectedVerse?.verse?.morphology || [];
-                  const activeWordIndex = morphWords.findIndex(
-                    (m: any) => m.lemma === activeLexiconWord || m.word === activeLexiconWord
-                  );
-                  const hasMultipleWords = morphWords.length > 1;
-
-                  const cycleWord = (direction: number) => {
-                    if (morphWords.length === 0) return;
-                    let newIndex = activeWordIndex + direction;
-                    if (newIndex < 0) {
-                      newIndex = morphWords.length - 1;
-                    } else if (newIndex >= morphWords.length) {
-                      newIndex = 0;
+              <div className="flex-1 overflow-hidden">
+                <StudyPane
+                  verseId={selectedVerse.verse.id}
+                  initialTab={studyInitialTab}
+                  initialLexiconWord={studyInitialWord}
+                  onVerseClick={(id) => {
+                    const parts = id.split(".");
+                    if (parts.length >= 2) {
+                      setBook(parts[0]);
+                      setChapter(parseInt(parts[1]));
                     }
-                    const nextWord = morphWords[newIndex];
-                    handleOriginalWordClick(nextWord.word, nextWord.lemma);
-                  };
-
-                  return (
-                    <>
-                      {/* Word Cycler Card */}
-                      <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 shadow-xs shrink-0">
-                        <button
-                          onClick={() => cycleWord(-1)}
-                          disabled={!hasMultipleWords}
-                          className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
-                          title="Previous Word in Verse"
-                        >
-                          <ChevronLeft size={16} />
-                        </button>
-                        
-                        <div className="text-center flex-1 mx-2">
-                          <div className="text-[10px] text-slate-400 uppercase tracking-widest font-sans font-bold mb-0.5">
-                            Verse Word {activeWordIndex !== -1 ? `${activeWordIndex + 1} of ${morphWords.length}` : ""}
-                          </div>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span className="text-2xl font-serif font-bold text-slate-900 leading-normal">
-                              {activeWordIndex !== -1 ? morphWords[activeWordIndex].word : activeLexiconWord}
-                            </span>
-                            <button
-                              onClick={() => handlePlayAudio(activeWordIndex !== -1 ? (morphWords[activeWordIndex].lemma || morphWords[activeWordIndex].word) : activeLexiconWord)}
-                              className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-all cursor-pointer"
-                              title="Play Pronunciation Audio"
-                            >
-                              <Volume2 size={14} />
-                            </button>
-                          </div>
-                          {activeWordIndex !== -1 && morphWords[activeWordIndex].lemma && (
-                            <div className="text-xs text-slate-500 font-sans mt-0.5">
-                              Lemma: <span className="font-semibold text-slate-700">{morphWords[activeWordIndex].lemma}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => cycleWord(1)}
-                          disabled={!hasMultipleWords}
-                          className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
-                          title="Next Word in Verse"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
-                      </div>
-
-                      {/* Strong's Definitions Block */}
-                      <h3 className="text-base font-bold font-sans text-slate-900 mb-3">
-                        Strong&apos;s Definitions
-                      </h3>
-
-                      {lexiconLoading ? (
-                        <div className="flex items-center justify-center h-32">
-                          <Loader2 size={24} className="animate-spin text-purple-600" />
-                        </div>
-                      ) : lexiconData.length > 0 ? (
-                        <div className="space-y-4">
-                          {lexiconData.map((item, idx) => (
-                            <div key={idx} className="border border-slate-200 bg-white p-5 rounded-xl shadow-xs space-y-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                                  {item.strongs_id}
-                                </span>
-                                <span className="text-base font-bold text-slate-900">{item.lemma}</span>
-                                {getTransliteration(item.lemma) && (
-                                  <span className="text-xs text-sky-600 font-mono italic">
-                                    ({getTransliteration(item.lemma)})
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-base leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-150 font-serif">
-                                {item.definition}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-xs italic text-center py-6 text-slate-500 font-sans">
-                          No Strong&apos;s definitions found for &quot;{activeLexiconWord}&quot;.
-                        </div>
-                      )}
-
-                      {/* Occurrences List */}
-                      <div className="mt-6 space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-sans">
-                          Occurrences in Scripture
-                        </h4>
-                        {occurrencesLoading ? (
-                          <div className="flex items-center justify-center py-6">
-                            <Loader2 size={18} className="animate-spin text-slate-400" />
-                          </div>
-                        ) : occurrences.length > 0 ? (
-                          <div className="flex flex-col gap-4">
-                            {occurrences.map((o) => (
-                              <button
-                                key={o.id}
-                                onClick={() => {
-                                  const parts = o.id.split(".");
-                                  setBook(parts[0]);
-                                  setChapter(parseInt(parts[1]));
-                                  handleVerseClick(o.id);
-                                }}
-                                className="text-left p-5 rounded-xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-all cursor-pointer shadow-xs block w-full"
-                              >
-                                <div className="font-semibold text-blue-600 text-sm font-sans mb-1.5">
-                                  {getBookName(o.book)} {o.chapter}:{o.verse}
-                                </div>
-                                <div className="text-slate-700 text-base leading-relaxed font-prose">{o.text_en}</div>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-xs italic text-center py-6 text-slate-500 font-sans">
-                            No other occurrences found.
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  );
-                })()}
+                    if (props.setSelectedVerseId) {
+                      props.setSelectedVerseId(id);
+                    }
+                    handleVerseClick(id);
+                  }}
+                />
               </div>
             </motion.div>
           )}

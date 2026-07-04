@@ -382,6 +382,20 @@ def build_lexicon_lookup():
     finally:
         conn.close()
 
+OT_BOOKS = [
+    'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI', 
+    '1CH', '2CH', 'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER', 
+    'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBD', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP', 
+    'HAG', 'ZEC', 'MAL'
+]
+NT_BOOKS = [
+    'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL', 'EPH', 'PHP', 'COL', 
+    '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS', '1PE', '2PE', '1JN', '2JN', 
+    '3JN', 'JUD', 'REV'
+]
+ALL_BOOKS = OT_BOOKS + NT_BOOKS
+BOOK_ORDER = {code: i for i, code in enumerate(ALL_BOOKS)}
+
 class JSONAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress logging to stdout to prevent polluting stdio MCP traffic
@@ -456,23 +470,46 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
             elif path == "/api/search":
                 q = query_params.get("q", [""])[0]
                 book = query_params.get("book", [None])[0]
+                testament = query_params.get("testament", [None])[0]
+                sort = query_params.get("sort", ["relevance"])[0]
+                page = int(query_params.get("page", ["1"])[0])
+                limit = int(query_params.get("limit", ["50"])[0])
+
                 if q:
-                    if book:
-                        cursor.execute("""
-                            SELECT id, book, chapter, verse, text_en 
-                            FROM search_en 
-                            WHERE text_en MATCH ? AND book = ? 
-                            LIMIT 50
-                        """, (q, book.upper()))
+                    cursor.execute("""
+                        SELECT id, book, chapter, verse, text_en, rank 
+                        FROM search_en 
+                        WHERE text_en MATCH ?
+                    """, (q,))
+                    rows = [dict(r) for r in cursor.fetchall()]
+
+                    # Apply filters
+                    filtered_rows = rows
+                    if book and book.strip() and book.upper() != "ALL":
+                        filtered_rows = [r for r in filtered_rows if r["book"].upper() == book.upper()]
+                    if testament and testament.strip() and testament.upper() != "ALL":
+                        if testament.upper() == "OT":
+                            filtered_rows = [r for r in filtered_rows if r["book"].upper() in OT_BOOKS]
+                        elif testament.upper() == "NT":
+                            filtered_rows = [r for r in filtered_rows if r["book"].upper() in NT_BOOKS]
+
+                    # Apply sorting
+                    if sort == "canonical":
+                        filtered_rows.sort(key=lambda r: (BOOK_ORDER.get(r["book"].upper(), 999), r["chapter"], r["verse"]))
                     else:
-                        cursor.execute("""
-                            SELECT id, book, chapter, verse, text_en 
-                            FROM search_en 
-                            WHERE text_en MATCH ? 
-                            LIMIT 50
-                        """, (q,))
-                    rows = cursor.fetchall()
-                    response_data = {"results": [dict(r) for r in rows]}
+                        # rank values are float in sqlite fts5; relevance: smallest rank first
+                        filtered_rows.sort(key=lambda r: r.get("rank", 0.0))
+
+                    total_results = len(filtered_rows)
+                    offset = (page - 1) * limit
+                    paginated_rows = filtered_rows[offset : offset + limit]
+
+                    response_data = {
+                        "results": paginated_rows,
+                        "total": total_results,
+                        "page": page,
+                        "limit": limit
+                    }
                     status_code = 200
 
             elif path == "/api/verse":

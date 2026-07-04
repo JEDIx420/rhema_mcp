@@ -3,6 +3,8 @@
 @theme {
   --font-sans: var(--font-outfit), system-ui, -apple-system, sans-serif;
   --font-prose: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --text-base: 1rem;
+  --text-base--line-height: 1.625;
 }
 
 :root {
@@ -29,25 +31,49 @@
   --glow-shadow: 0 4px 20px rgba(37, 99, 235, 0.05);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-html, body {
-  height: 100%;
-  background: #f8fafc;
-  background-image: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-}
+  html {
+    font-size: 16px;
+    height: 100%;
+    overflow: hidden;
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-outfit), sans-serif;
-  letter-spacing: -0.025em;
+  body {
+    height: 100%;
+    background: #f8fafc;
+    background-image: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  p, article, li {
+    font-family: var(--font-prose), sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: #334155;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans), sans-serif;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+  }
+
+  input[type="text"], input[type="search"], select, textarea {
+    @apply bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all;
+  }
+
+  button {
+    @apply font-sans;
+  }
 }
 
 /* Glassmorphism utility card */

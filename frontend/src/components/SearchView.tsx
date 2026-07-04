@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Search as SearchIcon, Loader2, BookOpen, Navigation } from "lucide-react";
+import { Search as SearchIcon, Loader2, Navigation, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import { searchScriptures } from "@/lib/api";
-import { getBookName } from "@/lib/books";
+import { BIBLE_BOOKS, getBookName } from "@/lib/books";
+import StudyPane from "./StudyPane";
 
 interface SearchResult {
   id: string;
@@ -24,132 +25,302 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [book, setBook] = useState("ALL");
+  const [testament, setTestament] = useState("ALL");
+  const [sort, setSort] = useState("relevance");
+  const [page, setPage] = useState(1);
+  const [selectedVerseId, setSelectedVerseId] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const limit = 50;
+
+  const triggerSearch = async (
+    searchQuery: string,
+    filters: { book: string; testament: string; sort: string; page: number }
+  ) => {
+    if (!searchQuery.trim()) return;
     setLoading(true);
     setSearched(true);
     try {
-      const data = await searchScriptures(query);
+      const data = await searchScriptures(searchQuery, {
+        book: filters.book,
+        testament: filters.testament,
+        sort: filters.sort,
+        page: filters.page,
+        limit
+      });
       setResults(data.results || []);
+      setTotal(data.total || 0);
     } catch {
       setResults([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJumpToVerse = (r: SearchResult) => {
+  const handleSearch = (e?: React.FormEvent, customQuery?: string) => {
+    if (e) e.preventDefault();
+    const searchQuery = customQuery !== undefined ? customQuery : query;
+    setPage(1);
+    setSelectedVerseId(null);
+    triggerSearch(searchQuery, { book, testament, sort, page: 1 });
+  };
+
+  const handleFilterChange = (updates: { book?: string; testament?: string; sort?: string }) => {
+    const nextBook = updates.book !== undefined ? updates.book : book;
+    const nextTestament = updates.testament !== undefined ? updates.testament : testament;
+    const nextSort = updates.sort !== undefined ? updates.sort : sort;
+
+    setBook(nextBook);
+    setTestament(nextTestament);
+    setSort(nextSort);
+    setPage(1);
+
+    triggerSearch(query, { book: nextBook, testament: nextTestament, sort: nextSort, page: 1 });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    triggerSearch(query, { book, testament, sort, page: newPage });
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setQuery(suggestion);
+    setPage(1);
+    setSelectedVerseId(null);
+    triggerSearch(suggestion, { book, testament, sort, page: 1 });
+  };
+
+  const handleClear = () => {
+    setSearched(false);
+    setQuery("");
+    setResults([]);
+    setTotal(0);
+    setBook("ALL");
+    setTestament("ALL");
+    setSort("relevance");
+    setPage(1);
+    setSelectedVerseId(null);
+  };
+
+  const handleJumpToReadingDesk = (r: SearchResult, e: React.MouseEvent) => {
+    e.stopPropagation(); // Avoid selecting the card
     if (onNavigate && onViewChange) {
       onNavigate(r.book, r.chapter, r.verse);
       onViewChange("read");
     }
   };
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
-      {/* Search Header */}
-      <div className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900 font-sans">
-          Search Scriptures
-        </h2>
-      </div>
+  const totalPages = Math.ceil(total / limit);
+  const startIndex = (page - 1) * limit + 1;
+  const endIndex = Math.min(page * limit, total);
 
-      {/* Search Query Area */}
-      <div className="p-8 border-b border-slate-200 shrink-0 bg-slate-50 flex justify-center">
-        <form onSubmit={handleSearch} className="w-full max-w-2xl">
-          <div className="relative flex items-center bg-white rounded-xl shadow-sm border border-slate-300 transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-            <SearchIcon
-              size={22}
-              className="absolute left-5 pointer-events-none text-slate-400"
-            />
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+      {/* Left Column: Search & Results */}
+      <div className="col-span-1 md:col-span-5 border-r border-slate-200 bg-slate-55 flex flex-col h-full overflow-hidden">
+        {/* Search Input Box */}
+        <div className="p-6 border-b border-slate-200 bg-white shrink-0">
+          <form onSubmit={(e) => handleSearch(e)} className="relative w-full">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder='Search words or phrases (e.g., "covenant", "love")...'
-              className="w-full pl-14 pr-32 py-4 bg-transparent border-none outline-none text-lg text-slate-900 placeholder-slate-400 rounded-xl font-sans"
+              placeholder="Search words or phrases (e.g., covenant, love)..."
+              className="w-full h-14 bg-white rounded-xl border border-slate-300 shadow-sm pl-4 pr-24 text-lg outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-sans"
             />
             <button
               type="submit"
-              className="absolute right-3 px-6 py-2.5 rounded-xl text-base font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs cursor-pointer font-sans"
+              className="absolute right-1.5 top-1.5 bottom-1.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center cursor-pointer font-sans text-sm"
             >
               Search
             </button>
+          </form>
+        </div>
+
+        {/* Filter Row */}
+        {searched && (
+          <div className="flex items-center justify-between gap-3 p-4 border-b border-slate-200 bg-white shrink-0">
+            <div className="flex items-center gap-2">
+              <select
+                value={testament}
+                onChange={(e) => handleFilterChange({ testament: e.target.value })}
+                className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors cursor-pointer outline-none font-sans"
+              >
+                <option value="ALL">All Testaments</option>
+                <option value="OT">Old Testament</option>
+                <option value="NT">New Testament</option>
+              </select>
+
+              <select
+                value={book}
+                onChange={(e) => handleFilterChange({ book: e.target.value })}
+                className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors cursor-pointer outline-none font-sans max-w-[120px]"
+              >
+                <option value="ALL">All Books</option>
+                {BIBLE_BOOKS.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={sort}
+                onChange={(e) => handleFilterChange({ sort: e.target.value })}
+                className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors cursor-pointer outline-none font-sans"
+              >
+                <option value="relevance">Relevance</option>
+                <option value="canonical">Chronological</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleClear}
+              className="text-sm text-slate-500 hover:text-slate-800 font-medium cursor-pointer font-sans shrink-0"
+            >
+              Clear
+            </button>
           </div>
-        </form>
+        )}
+
+        {/* Results Container */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-500 text-sm font-sans">
+              <Loader2 size={32} className="animate-spin text-blue-500" />
+              <span>Searching scriptural index...</span>
+            </div>
+          )}
+
+          {!loading && !searched && (
+            <div className="py-12 px-6">
+              <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 font-sans text-center">
+                Suggested Searches
+              </h4>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {["Love one another", "Covenant", "David", "Grace"].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => handleSuggestionClick(suggestion)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all font-sans text-sm font-medium"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && searched && results.length === 0 && (
+            <div className="text-center py-20 text-slate-450 font-sans">
+              <SearchIcon size={40} className="mx-auto mb-3 opacity-20 text-slate-400" />
+              <p className="text-sm text-slate-500">No results found for &quot;{query}&quot;</p>
+              <button
+                onClick={handleClear}
+                className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+              >
+                Clear Search
+              </button>
+            </div>
+          )}
+
+          {!loading && results.length > 0 && (
+            <>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 py-1 font-sans">
+                Search Results ({total})
+              </div>
+              <div className="space-y-3">
+                {results.map((r, i) => {
+                  const isSelected = selectedVerseId === r.id;
+                  return (
+                    <motion.div
+                      key={r.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.015, 0.2) }}
+                      onClick={() => setSelectedVerseId(r.id)}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 text-left select-none ${
+                        isSelected
+                          ? "ring-2 ring-blue-500 bg-blue-50/30 border-blue-400"
+                          : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            {r.id}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 font-sans">
+                            {getBookName(r.book)} {r.chapter}:{r.verse}
+                          </span>
+                        </div>
+                        <button
+                          onClick={(e) => handleJumpToReadingDesk(r, e)}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
+                          title="Jump to reading desk"
+                        >
+                          <Navigation size={13} />
+                        </button>
+                      </div>
+                      <p className="text-[15px] leading-relaxed text-slate-700 font-prose pr-2">
+                        {r.text_en}
+                      </p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="py-4 border-t border-slate-200 flex flex-col gap-3 items-center justify-between font-sans text-xs">
+                  <span className="text-slate-500">
+                    Showing <span className="font-semibold text-slate-900">{startIndex}-{endIndex}</span> of{" "}
+                    <span className="font-semibold text-slate-900">{total}</span> results
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={page === 1}
+                      onClick={() => handlePageChange(page - 1)}
+                      className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft size={12} />
+                      Prev
+                    </button>
+                    <span className="text-slate-600">
+                      {page} / {totalPages}
+                    </span>
+                    <button
+                      disabled={page === totalPages}
+                      onClick={() => handlePageChange(page + 1)}
+                      className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-all"
+                    >
+                      Next
+                      <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Results viewport */}
-      <div className="flex-1 overflow-y-auto p-8 relative">
-        {/* Subtle background glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
-
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-500 text-sm">
-            <Loader2 size={32} className="animate-spin text-blue-500" />
-            <span>Executing scriptural FTS5 query...</span>
-          </div>
-        )}
-
-        {!loading && searched && results.length === 0 && (
-          <div className="text-center py-20 text-slate-400 font-sans">
-            <SearchIcon size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="text-base">No results found for &quot;{query}&quot;</p>
-          </div>
-        )}
-
-        {!loading && !searched && (
-          <div className="text-center py-24 text-slate-400">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4 border border-blue-100">
-              <SearchIcon size={24} className="text-blue-500" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-700 mb-1.5 font-sans">Full-Text Scripture Search</h3>
-            <p className="text-sm text-slate-500 max-w-sm mx-auto leading-relaxed font-sans">
-              Execute lightning-fast full-text searches across both Testaments using our FTS5 virtual index.
+      {/* Right Column: Dynamic Study Pane */}
+      <div className="col-span-1 md:col-span-7 bg-white flex flex-col h-full overflow-hidden">
+        {selectedVerseId ? (
+          <StudyPane
+            verseId={selectedVerseId}
+            onVerseClick={(id) => setSelectedVerseId(id)}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 font-sans h-full">
+            <BookOpen size={48} className="text-slate-300 mb-4 stroke-[1.5]" />
+            <h3 className="text-lg font-bold text-slate-700 mb-1">Bible Exegesis Engine</h3>
+            <p className="text-sm text-slate-400 max-w-xs leading-relaxed">
+              Select a verse to view detailed exegesis, commentaries, cross-references, and word-level original language lexicons.
             </p>
-          </div>
-        )}
-
-        {results.length > 0 && (
-          <div className="max-w-4xl space-y-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500 font-sans">
-              Search Results ({results.length})
-            </div>
-            <div className="flex flex-col gap-4">
-              {results.map((r, i) => (
-                <motion.div
-                  key={r.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.02 }}
-                  className="p-5 rounded-xl border border-slate-200 bg-white flex items-start justify-between gap-5 transition-all duration-200 hover:border-blue-200 hover:shadow-md group"
-                >
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                        {r.id}
-                      </span>
-                      <span className="text-sm font-semibold text-slate-500 font-sans">
-                        {getBookName(r.book)} {r.chapter}:{r.verse}
-                      </span>
-                    </div>
-                    <p className="text-[17px] leading-relaxed text-slate-700 pr-4 font-prose">
-                      {r.text_en}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => handleJumpToVerse(r)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 cursor-pointer self-center"
-                    title="Jump to reading desk"
-                  >
-                    <Navigation size={16} />
-                  </button>
-                </motion.div>
-              ))}
-            </div>
           </div>
         )}
       </div>
