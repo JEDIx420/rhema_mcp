@@ -177,7 +177,8 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
 
   const handlePlaceSelect = (place: MapPlace) => {
     setSelectedPlace(place);
-    if (mapInstanceRef.current && place.latitude != null && place.longitude != null) {
+    if (place.latitude == null || place.longitude == null) return;
+    if (mapInstanceRef.current) {
       mapInstanceRef.current.setView([place.latitude, place.longitude], 10);
       
       // Find corresponding marker and open popup

@@ -112,3 +112,20 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--primary) !important;
   color: #ffffff !important;
 }
+
+/* Custom modal visible scrollbar */
+.custom-modal-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.custom-modal-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 8px;
+}
+.custom-modal-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+  border: 2.5px solid #f8fafc;
+}
+.custom-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

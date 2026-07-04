@@ -41,11 +41,7 @@ export default function BookChapterPickerModal({
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      onWheel={(e) => e.stopPropagation()}
-      onTouchMove={(e) => e.stopPropagation()}
-    >
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
@@ -81,7 +77,7 @@ export default function BookChapterPickerModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-8 custom-modal-scroll">
           {step === "book" ? (
             <div className="space-y-6">
               {/* Old Testament */}
