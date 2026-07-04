@@ -40,6 +40,7 @@ export default function SessionsView() {
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [titleInput, setTitleInput] = useState("");
+  const titleInputRef = useRef(titleInput);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize TipTap
@@ -83,12 +84,45 @@ export default function SessionsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep ref in sync with titleInput state
+  useEffect(() => {
+    titleInputRef.current = titleInput;
+  }, [titleInput]);
+
+  // Dispatch selection changes globally
+  useEffect(() => {
+    if (selectedSession) {
+      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+        detail: { sessionId: selectedSession.session_id, title: selectedSession.title }
+      }));
+    }
+  }, [selectedSession]);
+
+  // Synchronize selection with external updates (e.g. from StudyPane)
+  useEffect(() => {
+    const handleActiveSessionChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const sid = customEvent.detail.sessionId;
+        if (selectedSession?.session_id !== sid) {
+          const match = sessions.find((s) => s.session_id === sid);
+          if (match) {
+            setSelectedSession(match);
+          }
+        }
+      }
+    };
+    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+  }, [sessions, selectedSession]);
+
   // Update editor content when active session changes
   useEffect(() => {
     if (selectedSession && editor) {
       editor.commands.setContent(selectedSession.content || "");
       Promise.resolve().then(() => {
         setTitleInput(selectedSession.title);
+        titleInputRef.current = selectedSession.title;
       });
     }
   }, [selectedSession, editor]);
@@ -161,11 +195,12 @@ export default function SessionsView() {
     saveTimeoutRef.current = setTimeout(async () => {
       if (!selectedSession) return;
       try {
-        await updateSession(selectedSession.session_id, titleInput, htmlContent);
+        const currentTitle = titleInputRef.current;
+        await updateSession(selectedSession.session_id, currentTitle, htmlContent);
         setSessions((prev) => 
           prev.map((s) => 
             s.session_id === selectedSession.session_id 
-              ? { ...s, content: htmlContent, updated_at: new Date().toISOString() } 
+              ? { ...s, title: currentTitle, content: htmlContent, updated_at: new Date().toISOString() } 
               : s
           )
         );
@@ -326,6 +361,7 @@ export default function SessionsView() {
                 value={titleInput}
                 onChange={(e) => {
                   setTitleInput(e.target.value);
+                  titleInputRef.current = e.target.value;
                   if (editor) triggerAutoSave(editor.getHTML());
                 }}
                 className="font-bold text-lg text-slate-800 border-none outline-none bg-transparent focus:ring-0 w-2/3 font-sans"

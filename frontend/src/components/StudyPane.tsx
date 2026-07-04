@@ -181,8 +181,15 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       const res = await fetchSessions();
       const list = res.sessions || [];
       setStudySessions(list);
-      if (list.length > 0 && !selectedSessionId) {
-        setSelectedSessionId(list[0].session_id);
+      if (list.length > 0) {
+        if (selectedSessionId && list.some((s: any) => s.session_id === selectedSessionId)) {
+          // Keep current selection
+        } else {
+          setSelectedSessionId(list[0].session_id);
+          window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+            detail: { sessionId: list[0].session_id, title: list[0].title }
+          }));
+        }
       }
     } catch (err) {
       console.error(err);
@@ -198,6 +205,9 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       setNewSessionTitle("");
       await loadStudyPaneSessions();
       setSelectedSessionId(res.session_id);
+      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+        detail: { sessionId: res.session_id, title: res.title || newSessionTitle.trim() }
+      }));
       window.dispatchEvent(new CustomEvent("rhema-session-updated"));
     } catch (err) {
       console.error(err);
@@ -242,6 +252,20 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     return () => window.removeEventListener("rhema-session-updated", handleSessionUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    const handleActiveSessionChanged = (e: any) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const sid = customEvent.detail.sessionId;
+        if (selectedSessionId !== sid) {
+          setSelectedSessionId(sid);
+        }
+      }
+    };
+    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged as any);
+    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged as any);
+  }, [selectedSessionId]);
 
   const handleStudyPaneDragStart = (e: React.DragEvent, id: string, text: string) => {
     e.dataTransfer.setData("text/plain", text);
@@ -690,7 +714,16 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
               </label>
               <select
                 value={selectedSessionId || ""}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedSessionId(val);
+                  const matched = studySessions.find(s => s.session_id === val);
+                  if (matched) {
+                    window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+                      detail: { sessionId: val, title: matched.title }
+                    }));
+                  }
+                }}
                 className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm cursor-pointer font-sans"
               >
                 {studySessions.length === 0 ? (

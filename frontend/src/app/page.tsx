@@ -25,10 +25,20 @@ export default function Home() {
   // Drag-and-drop overlays state
   const [draggedVerse, setDraggedVerse] = useState<{ verseId: string; verseText: string } | null>(null);
 
+  // Active session states
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionTitle, setActiveSessionTitle] = useState<string | null>(null);
+  const [studySessionsList, setStudySessionsList] = useState<any[]>([]);
+
   // STT Voice recording state
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // STT Dictation review modal states
+  const [transcribedText, setTranscribedText] = useState<string | null>(null);
+  const [isProcessingSTT, setIsProcessingSTT] = useState(false);
+  const [reviewTargetSessionId, setReviewTargetSessionId] = useState<string | null>(null);
 
   // Track window drag listeners
   useEffect(() => {
@@ -55,14 +65,42 @@ export default function Home() {
     };
   }, []);
 
-  // Listen to session update notifications to force refresh
+  // Sync active session selection globally
   useEffect(() => {
+    const handleActiveSessionChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setActiveSessionId(customEvent.detail.sessionId);
+        setActiveSessionTitle(customEvent.detail.title);
+      }
+    };
+    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+  }, []);
+
+  // Fetch initial active session list and selection
+  useEffect(() => {
+    const initActiveSession = async () => {
+      try {
+        const res = await fetchSessions();
+        const list = res.sessions || [];
+        setStudySessionsList(list);
+        if (list.length > 0 && !activeSessionId) {
+          setActiveSessionId(list[0].session_id);
+          setActiveSessionTitle(list[0].title);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    initActiveSession();
+    
     const handleSessionUpdated = () => {
-      // Force trigger state updates across panels if active
+      initActiveSession();
     };
     window.addEventListener("rhema-session-updated", handleSessionUpdated);
     return () => window.removeEventListener("rhema-session-updated", handleSessionUpdated);
-  }, []);
+  }, [activeSessionId]);
 
   const startRecording = async () => {
     try {
@@ -78,6 +116,7 @@ export default function Home() {
       };
 
       mediaRecorder.onstop = async () => {
+        setIsProcessingSTT(true);
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
@@ -93,20 +132,18 @@ export default function Home() {
             if (res.ok) {
               const data = await res.json();
               if (data.text) {
-                const sessionsRes = await fetchSessions();
-                const sessions = sessionsRes.sessions || [];
-                if (sessions.length > 0) {
-                  const latest = sessions[0];
-                  const updatedContent = (latest.content || "") + `<p>${data.text}</p>`;
-                  await updateSession(latest.session_id, latest.title, updatedContent);
-                  
-                  window.dispatchEvent(new CustomEvent("rhema-session-updated"));
-                  setActiveView("sessions");
-                }
+                setTranscribedText(data.text);
+                setReviewTargetSessionId(activeSessionId);
+              } else {
+                alert("Speech recognition was unable to capture any words. Please try again.");
               }
+            } else {
+              alert("Speech recognition server error. Please try again.");
             }
           } catch (err) {
             console.error("STT transcribing error", err);
+          } finally {
+            setIsProcessingSTT(false);
           }
         };
         stream.getTracks().forEach((track) => track.stop());
@@ -123,6 +160,26 @@ export default function Home() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+    }
+  };
+
+  const handleConfirmTranscription = async () => {
+    if (!reviewTargetSessionId || !transcribedText || !transcribedText.trim()) return;
+    try {
+      const targetSession = studySessionsList.find(s => s.session_id === reviewTargetSessionId);
+      if (!targetSession) return;
+      const updatedContent = (targetSession.content || "") + `<p>${transcribedText.trim()}</p>`;
+      await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
+      
+      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+        detail: { sessionId: reviewTargetSessionId, title: targetSession.title }
+      }));
+      
+      setTranscribedText(null);
+      setActiveView("sessions");
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -234,20 +291,29 @@ export default function Home() {
 
       {/* 1. Listening Waveform Pill (STT Dictation Mode) */}
       <AnimatePresence>
-        {isRecording && (
+        {(isRecording || isProcessingSTT) && (
           <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="fixed top-6 right-6 z-50 px-4 py-2.5 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-full flex items-center gap-3 shadow-xl text-white"
+            className="fixed top-6 right-6 z-50 px-4 py-2.5 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-full flex items-center gap-3 shadow-xl text-white font-sans"
           >
-            <div className="flex gap-1 items-center h-4">
-              <span className="w-0.5 bg-blue-400 h-2 animate-bounce rounded" style={{ animationDelay: '0.1s' }} />
-              <span className="w-0.5 bg-blue-400 h-4 animate-bounce rounded" style={{ animationDelay: '0.2s' }} />
-              <span className="w-0.5 bg-blue-400 h-1 animate-bounce rounded" style={{ animationDelay: '0.3s' }} />
-              <span className="w-0.5 bg-blue-400 h-3 animate-bounce rounded" style={{ animationDelay: '0.4s' }} />
-            </div>
-            <span className="text-xs font-bold font-sans pr-1">Speech Dictation Active...</span>
+            {isRecording ? (
+              <>
+                <div className="flex gap-1 items-center h-4">
+                  <span className="w-0.5 bg-blue-400 h-2 animate-bounce rounded" style={{ animationDelay: '0.1s' }} />
+                  <span className="w-0.5 bg-blue-400 h-4 animate-bounce rounded" style={{ animationDelay: '0.2s' }} />
+                  <span className="w-0.5 bg-blue-400 h-1 animate-bounce rounded" style={{ animationDelay: '0.3s' }} />
+                  <span className="w-0.5 bg-blue-400 h-3 animate-bounce rounded" style={{ animationDelay: '0.4s' }} />
+                </div>
+                <span className="text-xs font-bold pr-1">Speech Dictation Active...</span>
+              </>
+            ) : (
+              <>
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <span className="text-xs font-bold pr-1">Transcribing Speech...</span>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -267,16 +333,29 @@ export default function Home() {
               const verseText = e.dataTransfer.getData("text/plain");
               if (verseId && verseText) {
                 try {
-                  const sessionsRes = await fetchSessions();
-                  const sessions = sessionsRes.sessions || [];
-                  if (sessions.length > 0) {
-                    const latest = sessions[0];
-                    const updatedContent = (latest.content || "") + 
-                      `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
-                    await updateSession(latest.session_id, latest.title, updatedContent);
-                    
-                    window.dispatchEvent(new CustomEvent("rhema-session-updated"));
-                    setActiveView("sessions");
+                  const targetSessionId = activeSessionId;
+                  if (targetSessionId) {
+                    const targetSession = studySessionsList.find(s => s.session_id === targetSessionId);
+                    if (targetSession) {
+                      const updatedContent = (targetSession.content || "") + 
+                        `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
+                      await updateSession(targetSession.session_id, targetSession.title, updatedContent);
+                      
+                      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                      setActiveView("sessions");
+                    }
+                  } else {
+                    const sessionsRes = await fetchSessions();
+                    const sessions = sessionsRes.sessions || [];
+                    if (sessions.length > 0) {
+                      const latest = sessions[0];
+                      const updatedContent = (latest.content || "") + 
+                        `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
+                      await updateSession(latest.session_id, latest.title, updatedContent);
+                      
+                      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                      setActiveView("sessions");
+                    }
                   }
                 } catch (err) {
                   console.error(err);
@@ -288,8 +367,8 @@ export default function Home() {
             <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 animate-bounce">
               <Save size={20} />
             </div>
-            <p className="text-sm font-bold text-slate-800 font-sans">Drop here to save verse</p>
-            <p className="text-[11px] text-slate-400 font-sans">Appends quote block to latest session</p>
+            <p className="text-sm font-bold text-slate-800 font-sans">Drop here to save reference</p>
+            <p className="text-[11px] text-slate-400 font-sans">Appends to: <strong className="text-blue-600">{activeSessionTitle || "latest session"}</strong></p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -314,6 +393,80 @@ export default function Home() {
           <Mic size={22} />
         </button>
       </div>
+
+      {/* STT Dictation Review Modal */}
+      <AnimatePresence>
+        {transcribedText !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/30 backdrop-blur-xs">
+            <div className="fixed inset-0" onClick={() => setTranscribedText(null)} />
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="bg-white border border-slate-200 shadow-2xl rounded-3xl w-full max-w-xl p-6 flex flex-col gap-4 font-sans z-10"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h4 className="font-extrabold text-lg text-slate-900 font-sans">
+                  Dictation Review
+                </h4>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-sans">
+                  Speech-to-Text
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">
+                  Transcribed Text
+                </label>
+                <textarea
+                  value={transcribedText}
+                  onChange={(e) => setTranscribedText(e.target.value)}
+                  className="w-full h-24 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-sans leading-relaxed resize-none"
+                  placeholder="Captured speech will appear here..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">
+                  Target Study Log
+                </label>
+                <select
+                  value={reviewTargetSessionId || ""}
+                  onChange={(e) => setReviewTargetSessionId(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-850 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm cursor-pointer font-sans"
+                >
+                  {studySessionsList.length === 0 ? (
+                    <option value="">No sessions available</option>
+                  ) : (
+                    studySessionsList.map((s) => (
+                      <option key={s.session_id} value={s.session_id}>
+                        {s.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setTranscribedText(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-bold transition-all cursor-pointer font-sans"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={handleConfirmTranscription}
+                  disabled={!reviewTargetSessionId || !transcribedText.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 cursor-pointer font-sans"
+                >
+                  Confirm & Save
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
