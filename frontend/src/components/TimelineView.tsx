@@ -80,11 +80,10 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50/30">
+    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
       {/* Header */}
       <div
-        className="h-16 px-6 border-b shrink-0 flex items-center justify-between"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+        className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm"
       >
         <div className="flex items-center gap-2">
           <Clock size={18} style={{ color: "var(--primary)" }} />
@@ -110,7 +109,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
         <div className="flex-1 flex flex-col overflow-hidden p-6 gap-6">
           
           {/* Interactive Horizontal Timeline Track */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs shrink-0">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm shrink-0">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">
               Interactive Horizontal Timeline Map
             </span>
@@ -173,7 +172,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
           <div className="flex-1 flex gap-6 overflow-hidden min-h-0">
             {/* Left Column: Event details card */}
             {closestEvent && (
-              <div className="flex-[3] flex flex-col bg-white border border-slate-200 rounded-3xl p-6 shadow-xs overflow-y-auto">
+              <div className="flex-[3] flex flex-col bg-white border border-slate-200 rounded-xl p-5 shadow-sm overflow-y-auto">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
                   <div className="flex items-center gap-2">
                     <Calendar className="text-blue-500" size={16} />
@@ -226,7 +225,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
             )}
 
             {/* Right Column: Historical List */}
-            <div className="flex-[2] flex flex-col bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden">
+            <div className="flex-[2] flex flex-col bg-white border border-slate-200 rounded-xl p-5 shadow-sm overflow-hidden">
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 block shrink-0">
                 All Chronological Events
               </h4>

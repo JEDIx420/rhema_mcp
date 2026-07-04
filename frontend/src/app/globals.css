@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-outfit), system-ui, -apple-system, sans-serif;
+  --font-prose: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
 :root {
   /* Light Mode Exegesis Theme - Crisp white base with blue accents */
   --bg-base: #f8fafc;

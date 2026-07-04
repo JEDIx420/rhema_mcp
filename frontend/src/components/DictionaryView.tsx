@@ -51,11 +51,11 @@ export default function DictionaryView() {
       </div>
 
       {/* Dictionary Query Area */}
-      <div className="p-8 border-b shrink-0 bg-slate-50/40 flex justify-center" style={{ borderColor: "var(--border-subtle)" }}>
-        <form onSubmit={handleSearch} className="w-full max-w-3xl">
-          <div className="relative flex items-center bg-white border border-slate-200 rounded-2xl shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-500 transition-all duration-200">
+      <div className="p-8 border-b border-slate-200 shrink-0 bg-slate-50 flex justify-center">
+        <form onSubmit={handleSearch} className="w-full max-w-2xl">
+          <div className="relative flex items-center bg-white rounded-xl shadow-sm border border-slate-300 transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
             <Search
-              size={20}
+              size={22}
               className="absolute left-5 pointer-events-none text-slate-400"
             />
             <input
@@ -63,11 +63,11 @@ export default function DictionaryView() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={"Search Strong's, Easton's, Smith's, Nave's (e.g., \"grace\", \"baptism\")..."}
-              className="w-full pl-14 pr-28 py-4 bg-transparent border-none outline-none text-base text-slate-800 placeholder-slate-400 rounded-2xl font-sans"
+              className="w-full pl-14 pr-28 py-4 bg-transparent border-none outline-none text-lg text-slate-900 placeholder-slate-400 rounded-xl font-sans"
             />
             <button
               type="submit"
-              className="absolute right-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              className="absolute right-3 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs cursor-pointer"
             >
               Search
             </button>

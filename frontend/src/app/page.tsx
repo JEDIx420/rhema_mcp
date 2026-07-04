@@ -89,7 +89,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
       {/* CommandCenter Keyboard-Activated Command Launcher */}
       <CommandCenter
         onNavigate={handleNavigate}

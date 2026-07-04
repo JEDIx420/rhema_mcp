@@ -158,20 +158,18 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Places Sidebar */}
-      <div
-        className="w-80 border-r flex flex-col shrink-0"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
-      >
-        <div className="h-16 px-4 border-b flex items-center gap-2 shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
-          <Compass size={18} style={{ color: "var(--primary)" }} />
-          <h3 className="font-bold text-sm" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>
+      <div className="w-80 border-r border-slate-200 flex flex-col shrink-0 bg-white">
+        <div className="h-16 px-4 border-b border-slate-200 flex items-center gap-2 shrink-0">
+          <Compass size={18} className="text-blue-600" />
+          <h3 className="font-bold text-sm text-slate-900 font-sans">
             GIS Geography Map
           </h3>
         </div>
+        
+        {/* Clickable Context Banner */}
         <button
           onClick={() => setShowPicker(true)}
-          className="p-3.5 bg-blue-50/50 hover:bg-blue-50 text-xs text-blue-600 border-b flex items-center justify-between cursor-pointer w-full text-left transition-colors font-semibold"
-          style={{ borderColor: "var(--border-subtle)" }}
+          className="m-3 p-3 bg-blue-50/50 hover:bg-blue-50 text-xs text-blue-600 rounded-xl border border-blue-200/50 flex items-center justify-between cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] font-sans font-semibold shadow-xs"
         >
           <span>Current Context:</span>
           <span className="font-bold uppercase flex items-center gap-1">
@@ -188,12 +186,16 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
               <span>Loading coordinates...</span>
             </div>
           ) : places.length === 0 ? (
-            <div className="text-center p-8 text-xs text-slate-500 italic">
-              No geocoded places found in this chapter.
+            <div className="text-center py-20 px-4 text-xs text-slate-400 font-sans flex flex-col items-center justify-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <Compass size={18} />
+              </div>
+              <p className="font-semibold text-slate-600">No geocoded places.</p>
+              <p className="text-[10px] text-slate-400 max-w-[180px] leading-normal text-center">This book chapter does not contain coordinate records in the local atlas.</p>
             </div>
           ) : (
             <div className="space-y-1">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 py-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 py-1 font-sans">
                 Places Mentioned ({places.length})
               </div>
               {places.map((place, idx) => {
@@ -202,7 +204,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                   <button
                     key={idx}
                     onClick={() => handlePlaceSelect(place)}
-                    className="w-full text-left p-2.5 rounded-xl text-xs hover:bg-slate-100 transition-all flex items-start gap-2.5 cursor-pointer border border-transparent"
+                    className="w-full text-left p-2.5 rounded-xl text-xs hover:bg-slate-50 transition-all flex items-start gap-2.5 cursor-pointer border border-transparent hover:border-slate-200"
                     style={{
                       background: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
                       borderColor: isSelected ? "rgba(37, 99, 235, 0.2)" : "transparent",
@@ -212,11 +214,11 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-slate-800 truncate flex items-center justify-between">
                         <span>{place.name}</span>
-                        <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-normal">
+                        <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-normal font-sans">
                           {place.type}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-555 mt-1 flex items-center justify-between">
+                      <div className="text-[10px] text-slate-550 mt-1 flex items-center justify-between">
                         <span>Ref: <strong className="text-blue-600">{place.verse_id}</strong></span>
                         <span className="font-mono text-[9px]">{place.latitude.toFixed(2)}, {place.longitude.toFixed(2)}</span>
                       </div>
@@ -230,9 +232,9 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
 
         {/* Bottom Details Panel */}
         {selectedPlace && (
-          <div className="p-4 border-t" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-surface-elevated)" }}>
+          <div className="p-4 border-t border-slate-200 bg-slate-50 shadow-inner">
             <h4 className="font-bold text-xs text-blue-600 mb-1">{selectedPlace.name}</h4>
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Type: {selectedPlace.type}</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-sans">Type: {selectedPlace.type}</div>
             <button
               onClick={() => {
                 if (onNavigate) {
@@ -240,7 +242,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                   onNavigate(parts[0], parseInt(parts[1]), parseInt(parts[2]));
                 }
               }}
-              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-semibold cursor-pointer transition-colors"
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-semibold cursor-pointer transition-colors shadow-xs"
             >
               <Navigation size={12} />
               Read {selectedPlace.verse_id}

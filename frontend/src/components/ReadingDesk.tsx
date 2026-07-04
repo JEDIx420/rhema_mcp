@@ -749,10 +749,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden relative">
+    <div className="flex flex-col h-full overflow-hidden relative bg-slate-50">
       <div
-        className="h-16 flex items-center justify-between px-5 border-b shrink-0"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+        className="h-16 flex items-center justify-between px-5 border-b border-slate-200 bg-white shrink-0 shadow-sm"
       >
         <div className="flex items-center gap-3">
           <button
@@ -793,11 +792,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
         {/* Text Sizer & Translation Toggles */}
         <div className="flex items-center gap-4">
           {/* Font Sizer */}
-          <div className="flex items-center border rounded-xl overflow-hidden bg-slate-50/50" style={{ borderColor: "var(--border-subtle)" }}>
+          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
             <button
               onClick={() => setTextSize(Math.max(12, textSize - 1))}
-              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-r cursor-pointer text-xs font-semibold text-slate-500"
-              style={{ borderColor: "var(--border-subtle)" }}
+              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-r border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
               title="Decrease Font Size"
             >
               A-
@@ -807,8 +805,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             </span>
             <button
               onClick={() => setTextSize(Math.min(26, textSize + 1))}
-              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-l cursor-pointer text-xs font-semibold text-slate-500"
-              style={{ borderColor: "var(--border-subtle)" }}
+              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-l border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
               title="Increase Font Size"
             >
               A+
@@ -818,18 +815,17 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           {/* Vertical Divider */}
           <div className="w-px h-5 bg-slate-200" />
 
-          {/* Translation Pill Buttons */}
-          <div className="flex items-center gap-2.5">
+          {/* Translation Segmented Control */}
+          <div className="flex items-center bg-slate-100/70 p-1 rounded-full border border-slate-200/50 shadow-inner gap-0.5">
             {enabledTranslations.map((t) => (
               <button
                 key={t.key}
                 onClick={() => toggleTranslation(t.key)}
-                className="px-4 py-1.5 rounded-2xl text-[13px] transition-all duration-200 cursor-pointer font-medium border shadow-xs"
-                style={{
-                  background: t.enabled ? "rgba(37, 99, 235, 0.08)" : "var(--bg-surface-elevated)",
-                  color: t.enabled ? "var(--primary)" : "var(--text-muted)",
-                  borderColor: t.enabled ? "rgba(37, 99, 235, 0.25)" : "var(--border-subtle)",
-                }}
+                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 cursor-pointer font-sans ${
+                  t.enabled 
+                    ? "bg-white text-blue-600 shadow-xs border border-slate-200/20 font-semibold" 
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
               >
                 {t.label}
               </button>
@@ -839,9 +835,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       </div>
 
       {/* Reading Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden bg-slate-50">
         {/* Main Verses Panel */}
-        <div className="flex-1 overflow-y-auto p-6" onClick={() => setVerseMenu(null)}>
+        <div className="flex-1 overflow-y-auto p-8 bg-white border border-slate-200 rounded-2xl shadow-sm m-4 relative" onClick={() => setVerseMenu(null)}>
           {loading && (
             <div className="flex items-center justify-center h-full">
               <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary)" }} />
@@ -888,13 +884,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     onClick={() => handleVerseClick(v.id)}
                   >
                     <div
-                      className={`grid gap-5`}
+                      className="grid gap-5 divide-x divide-slate-200"
                       style={{
                         gridTemplateColumns: activeTranslations.length > 1 ? `repeat(${activeTranslations.length}, 1fr)` : "1fr",
                       }}
                     >
-                      {activeTranslations.map((t) => (
-                        <div key={t.key} className="flex items-start">
+                      {activeTranslations.map((t, idx) => (
+                        <div key={t.key} className={`flex items-start ${idx > 0 ? "pl-5" : ""}`}>
                           <button
                             onClick={(e) => handleVerseNumberClick(e, v)}
                             className="text-xs font-bold mr-2.5 mt-0.5 select-none hover:text-blue-600 cursor-context-menu shrink-0"
@@ -951,42 +947,39 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "100%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="w-96 border-l overflow-hidden flex flex-col shrink-0"
-              style={{
-                background: "var(--bg-surface)",
-                borderColor: "var(--border-subtle)",
-              }}
+              className="w-96 border border-slate-200 overflow-hidden flex flex-col shrink-0 bg-white shadow-md my-4 mr-4 rounded-2xl"
             >
               {/* Drawer Tab Headers */}
-              <div className="flex border-b text-xs font-semibold" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-surface-elevated)" }}>
+              <div className="flex border-b border-slate-200 text-xs font-semibold bg-slate-50">
                 <button
                   onClick={() => setActiveTab("verse")}
-                  className="flex-1 py-3 text-center transition-colors cursor-pointer border-b-2"
-                  style={{
-                    color: activeTab === "verse" ? "var(--primary)" : "var(--text-muted)",
-                    borderColor: activeTab === "verse" ? "var(--primary)" : "transparent",
-                  }}
+                  className={`flex-1 py-3.5 text-center transition-all cursor-pointer border-b-2 font-sans ${
+                    activeTab === "verse" 
+                      ? "text-blue-600 border-blue-600 font-bold" 
+                      : "text-slate-500 border-transparent hover:text-slate-800"
+                  }`}
+                  style={{ color: activeTab === "verse" ? "#2563eb" : undefined, borderColor: activeTab === "verse" ? "#2563eb" : undefined }}
                 >
                   VERSE STUDY
                 </button>
                 {activeLexiconWord && (
                   <button
                     onClick={() => setActiveTab("lexicon")}
-                    className="flex-1 py-3 text-center transition-colors cursor-pointer border-b-2"
-                    style={{
-                      color: activeTab === "lexicon" ? "var(--accent)" : "var(--text-muted)",
-                      borderColor: activeTab === "lexicon" ? "var(--accent)" : "transparent",
-                    }}
+                    className={`flex-1 py-3.5 text-center transition-all cursor-pointer border-b-2 font-sans ${
+                      activeTab === "lexicon" 
+                        ? "text-purple-600 border-purple-600 font-bold" 
+                        : "text-slate-500 border-transparent hover:text-slate-800"
+                    }`}
+                    style={{ color: activeTab === "lexicon" ? "#7c3aed" : undefined, borderColor: activeTab === "lexicon" ? "#7c3aed" : undefined }}
                   >
-                    LEXICON: {activeLexiconWord}
+                    LEXICON
                   </button>
                 )}
                 <button
                   onClick={() => setSelectedVerse(null)}
-                  className="px-3 hover:text-red-400 transition-colors border-l"
-                  style={{ borderColor: "var(--border-subtle)" }}
+                  className="px-4 hover:text-red-500 transition-colors border-l border-slate-200 cursor-pointer"
                 >
-                  <X size={14} />
+                  <X size={15} />
                 </button>
               </div>
 
@@ -1207,15 +1200,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed z-50 p-3 rounded-lg border max-w-xs text-xs pointer-events-none"
+            className="fixed z-50 p-4 rounded-xl border border-slate-200 bg-white max-w-xs text-xs pointer-events-none shadow-md"
             style={{
               top: hoveredWord.y + 25,
               left: hoveredWord.x - 20,
-              background: "var(--bg-popover)",
-              borderColor: "var(--border-subtle)",
-              backdropFilter: "var(--glass-blur)",
-              boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
-              color: "var(--text-primary)",
             }}
           >
             <div className="font-bold text-sm mb-1 text-slate-800 flex items-center justify-between gap-2">
@@ -1251,19 +1239,19 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             )}
             {hoveredWord.strongsId && (
               <div className="mb-1">
-                <span className="text-[10px] px-1 py-0.2 rounded font-bold" style={{ background: "rgba(167, 139, 250, 0.15)", color: "var(--accent)" }}>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold font-mono bg-purple-100 text-purple-700">
                   {hoveredWord.strongsId}
                 </span>
               </div>
             )}
             {hoveredWord.definition ? (
-              <div className="mt-1 pt-1.5 border-t italic leading-relaxed text-slate-600 border-slate-200">
+              <div className="mt-2 pt-2 border-t text-slate-700 leading-relaxed italic border-slate-150 p-2.5 bg-slate-50 rounded-lg">
                 {hoveredWord.definition.length > 90
                   ? hoveredWord.definition.substring(0, 90) + "..."
                   : hoveredWord.definition}
               </div>
             ) : (
-              <div className="mt-1 pt-1.5 border-t text-[10px] text-slate-400 italic border-slate-200">
+              <div className="mt-2 pt-2 border-t text-[10px] text-slate-400 italic border-slate-150 p-2 text-center">
                 Loading lexicon definition...
               </div>
             )}
@@ -1347,7 +1335,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
         {selectedLexiconModalWord && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div 
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
               onClick={() => setSelectedLexiconModalWord(null)}
             />
             <motion.div
@@ -1356,16 +1344,16 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               exit={{ opacity: 0, scale: 0.95 }}
               className="relative bg-white border border-slate-200 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden z-10 p-6"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 shrink-0">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-extrabold px-2.5 py-1 rounded-xl" style={{ background: "rgba(167, 139, 250, 0.15)", color: "var(--accent)" }}>
-                    {selectedLexiconModalWord.strongs_id}
-                  </span>
-                  <div>
-                    <h3 className="font-extrabold text-base text-slate-800">{selectedLexiconModalWord.lemma}</h3>
+              <div className="flex items-start justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-3xl font-bold font-serif text-slate-900">{selectedLexiconModalWord.lemma}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                      {selectedLexiconModalWord.strongs_id}
+                    </span>
                     {getTransliteration(selectedLexiconModalWord.lemma) && (
-                      <span className="text-xs text-sky-600 font-mono italic">
-                        Pronunciation: {getTransliteration(selectedLexiconModalWord.lemma)}
+                      <span className="text-xs text-blue-600 font-medium font-sans">
+                        Pronunciation: <span className="italic font-semibold">{getTransliteration(selectedLexiconModalWord.lemma)}</span>
                       </span>
                     )}
                   </div>
@@ -1374,27 +1362,27 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                   onClick={() => setSelectedLexiconModalWord(null)}
                   className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-4">
-                <div className="p-4 rounded-2xl bg-blue-50/30 border border-blue-100/50 space-y-2 text-xs text-slate-700">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs text-slate-700">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-slate-400 font-semibold block text-[10px] uppercase">Dictionary Term</span>
+                      <span className="text-slate-400 font-semibold block text-[10px] uppercase font-sans">Original Transliterated Term</span>
                       <span className="font-bold text-slate-800 text-sm">{selectedLexiconModalWord.lemma}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 font-semibold block text-[10px] uppercase">Strong&apos;s Code</span>
-                      <span className="font-bold text-slate-800 text-sm">{selectedLexiconModalWord.strongs_id}</span>
+                      <span className="text-slate-400 font-semibold block text-[10px] uppercase font-sans">Strong&apos;s Catalog ID</span>
+                      <span className="font-bold text-slate-800 text-sm font-mono">{selectedLexiconModalWord.strongs_id}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">Lexicon Definition</h4>
-                  <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-2xl border border-slate-200/60 font-serif">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-sans">Lexicon Definition</h4>
+                  <p className="text-[15px] leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-serif">
                     {selectedLexiconModalWord.definition}
                   </p>
                 </div>

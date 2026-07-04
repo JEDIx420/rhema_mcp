@@ -36,21 +36,13 @@ export default function Sidebar({
       onMouseLeave={() => setHovered(false)}
       animate={{ width: hovered ? 220 : 64 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative h-full flex flex-col items-center border-r shrink-0 z-20"
-      style={{
-        background: "var(--bg-surface)",
-        borderColor: "var(--border-subtle)",
-        backdropFilter: "var(--glass-blur)",
-        WebkitBackdropFilter: "var(--glass-blur)",
-      }}
+      className="relative h-full flex flex-col items-center border-r border-slate-200 bg-white shrink-0 z-20"
     >
       {/* Brand Header - Height strictly matched to top navbar (64px / h-16) */}
-      <div className="h-16 w-full px-4 border-b flex items-center shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="h-16 w-full px-4 border-b border-slate-200 flex items-center shrink-0">
         <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-md shrink-0"
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-md shrink-0 bg-blue-600 text-white"
           style={{
-            background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)",
-            color: "#ffffff",
             boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
           }}
         >
@@ -62,10 +54,9 @@ export default function Sidebar({
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
-              className="ml-3 font-bold text-xs tracking-wider uppercase bg-clip-text text-transparent"
+              className="ml-3 font-bold text-xs tracking-wider uppercase bg-clip-text text-transparent font-sans"
               style={{
-                fontFamily: "var(--font-outfit), sans-serif",
-                backgroundImage: "linear-gradient(to right, var(--text-primary), var(--primary))",
+                backgroundImage: "linear-gradient(to right, #0f172a, #2563eb)",
               }}
             >
               Rhema
@@ -84,21 +75,17 @@ export default function Sidebar({
               key={item.id}
               onClick={() => onViewChange(item.id)}
               className={`flex items-center rounded-xl transition-all duration-200 cursor-pointer relative group w-full py-3 ${
-                hovered ? "justify-start px-3.5 gap-3.5" : "justify-center px-0"
+                hovered ? "justify-start px-3.5 gap-3" : "justify-center px-0"
+              } ${
+                isActive
+                  ? "bg-blue-50 text-blue-600 font-semibold"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
               }`}
-              style={{
-                color: isActive ? "var(--primary)" : "var(--text-muted)",
-              }}
               title={hovered ? "" : item.label}
             >
-              <div className="absolute inset-0 rounded-xl bg-slate-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-              
               <Icon
                 size={18}
                 className="shrink-0 transition-transform duration-200 group-hover:scale-105"
-                style={{
-                  color: isActive ? "var(--primary)" : "inherit",
-                }}
               />
               
               <AnimatePresence>
@@ -107,7 +94,7 @@ export default function Sidebar({
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -5 }}
-                    className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden"
+                    className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden font-sans"
                   >
                     {item.label}
                   </motion.span>
@@ -129,25 +116,21 @@ export default function Sidebar({
       </nav>
 
       {/* Bottom Section - Settings aligned at the bottom */}
-      <div className="w-full px-2 pb-4 border-t pt-3 shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="w-full px-2 pb-4 border-t border-slate-200 pt-3 shrink-0">
         <button
           onClick={() => onViewChange("settings")}
           className={`flex items-center rounded-xl transition-all duration-200 cursor-pointer relative group w-full py-3 ${
-            hovered ? "justify-start px-3.5 gap-3.5" : "justify-center px-0"
+            hovered ? "justify-start px-3.5 gap-3" : "justify-center px-0"
+          } ${
+            activeView === "settings"
+              ? "bg-blue-50 text-blue-600 font-semibold"
+              : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
           }`}
-          style={{
-            color: activeView === "settings" ? "var(--primary)" : "var(--text-muted)",
-          }}
           title={hovered ? "" : "Settings"}
         >
-          <div className="absolute inset-0 rounded-xl bg-slate-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-          
           <Settings
             size={18}
             className="shrink-0 transition-transform duration-200 group-hover:scale-105"
-            style={{
-              color: activeView === "settings" ? "var(--primary)" : "inherit",
-            }}
           />
           
           <AnimatePresence>
@@ -156,7 +139,7 @@ export default function Sidebar({
                 initial={{ opacity: 0, x: -5 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -5 }}
-                className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden"
+                className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden font-sans"
               >
                 Settings
               </motion.span>

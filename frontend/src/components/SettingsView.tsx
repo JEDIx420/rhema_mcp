@@ -39,11 +39,10 @@ export default function SettingsView() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
       {/* Header - strictly height matched h-16 (64px) */}
       <div
-        className="h-16 px-6 border-b shrink-0 flex items-center justify-between"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+        className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm"
       >
         <div className="flex items-center gap-2">
           <Settings size={18} style={{ color: "var(--primary)" }} />
