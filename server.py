@@ -504,11 +504,22 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     offset = (page - 1) * limit
                     paginated_rows = filtered_rows[offset : offset + limit]
 
+                    matching_books = sorted(list(set(r["book"].upper() for r in rows)))
+                    matching_testaments = []
+                    has_ot = any(b in OT_BOOKS for b in matching_books)
+                    has_nt = any(b in NT_BOOKS for b in matching_books)
+                    if has_ot:
+                        matching_testaments.append("OT")
+                    if has_nt:
+                        matching_testaments.append("NT")
+
                     response_data = {
                         "results": paginated_rows,
                         "total": total_results,
                         "page": page,
-                        "limit": limit
+                        "limit": limit,
+                        "matching_books": matching_books,
+                        "matching_testaments": matching_testaments
                     }
                     status_code = 200
 

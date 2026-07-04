@@ -31,6 +31,8 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
   const [sort, setSort] = useState("relevance");
   const [page, setPage] = useState(1);
   const [selectedVerseId, setSelectedVerseId] = useState<string | null>(null);
+  const [availableBooks, setAvailableBooks] = useState<string[]>([]);
+  const [availableTestaments, setAvailableTestaments] = useState<string[]>([]);
 
   const limit = 50;
 
@@ -51,9 +53,13 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
       });
       setResults(data.results || []);
       setTotal(data.total || 0);
+      setAvailableBooks(data.matching_books || []);
+      setAvailableTestaments(data.matching_testaments || []);
     } catch {
       setResults([]);
       setTotal(0);
+      setAvailableBooks([]);
+      setAvailableTestaments([]);
     } finally {
       setLoading(false);
     }
@@ -64,7 +70,9 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     const searchQuery = customQuery !== undefined ? customQuery : query;
     setPage(1);
     setSelectedVerseId(null);
-    triggerSearch(searchQuery, { book, testament, sort, page: 1 });
+    setBook("ALL");
+    setTestament("ALL");
+    triggerSearch(searchQuery, { book: "ALL", testament: "ALL", sort, page: 1 });
   };
 
   const handleFilterChange = (updates: { book?: string; testament?: string; sort?: string }) => {
@@ -89,7 +97,9 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     setQuery(suggestion);
     setPage(1);
     setSelectedVerseId(null);
-    triggerSearch(suggestion, { book, testament, sort, page: 1 });
+    setBook("ALL");
+    setTestament("ALL");
+    triggerSearch(suggestion, { book: "ALL", testament: "ALL", sort, page: 1 });
   };
 
   const handleClear = () => {
@@ -102,6 +112,8 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     setSort("relevance");
     setPage(1);
     setSelectedVerseId(null);
+    setAvailableBooks([]);
+    setAvailableTestaments([]);
   };
 
   const handleJumpToReadingDesk = (r: SearchResult, e: React.MouseEvent) => {
@@ -149,8 +161,8 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
                 className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors cursor-pointer outline-none font-sans"
               >
                 <option value="ALL">All Testaments</option>
-                <option value="OT">Old Testament</option>
-                <option value="NT">New Testament</option>
+                {availableTestaments.includes("OT") && <option value="OT">Old Testament</option>}
+                {availableTestaments.includes("NT") && <option value="NT">New Testament</option>}
               </select>
 
               <select
@@ -159,7 +171,7 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
                 className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors cursor-pointer outline-none font-sans max-w-[120px]"
               >
                 <option value="ALL">All Books</option>
-                {BIBLE_BOOKS.map((b) => (
+                {BIBLE_BOOKS.filter((b) => availableBooks.includes(b.code.toUpperCase())).map((b) => (
                   <option key={b.code} value={b.code}>
                     {b.name}
                   </option>
