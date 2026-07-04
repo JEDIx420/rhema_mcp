@@ -22,6 +22,18 @@ import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
 
+const BIBLE_CHAPTER_COUNTS: Record<string, number> = {
+  GEN: 50, EXO: 40, LEV: 27, NUM: 36, DEU: 34, JOS: 24, JDG: 21, RUT: 4,
+  "1SA": 31, "2SA": 24, "1KI": 22, "2KI": 25, "1CH": 29, "2CH": 36,
+  EZR: 10, NEH: 13, EST: 10, JOB: 42, PSA: 150, PRO: 31, ECC: 12, SNG: 8,
+  ISA: 66, JER: 52, LAM: 5, EZK: 48, DAN: 12, HOS: 14, JOL: 3, AMO: 9,
+  OBD: 1, JON: 4, MIC: 7, NAM: 3, HAB: 3, ZEP: 3, HAG: 2, ZEC: 14, MAL: 4,
+  MAT: 28, MRK: 16, LUK: 24, JHN: 21, ACT: 28, ROM: 16, "1CO": 16, "2CO": 13,
+  GAL: 6, EPH: 6, PHP: 4, COL: 4, "1TH": 5, "2TH": 3, "1TI": 6, "2TI": 4,
+  TIT: 3, PHM: 1, HEB: 13, JAS: 5, "1PE": 5, "2PE": 3, "1JN": 5, "2JN": 1,
+  "3JN": 1, JUD: 1, REV: 22
+};
+
 interface Verse {
   id: string;
   book: string;
@@ -443,15 +455,30 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   };
 
   const navigateChapter = (direction: number) => {
-    const newChapter = chapter + direction;
-    if (newChapter < 1) {
-      const bookIdx = BIBLE_BOOKS.findIndex((b) => b.code === book);
-      if (bookIdx > 0) {
-        setBook(BIBLE_BOOKS[bookIdx - 1].code);
-        setChapter(150); // Will clamp naturally in backend
+    const bookIdx = BIBLE_BOOKS.findIndex((b) => b.code === book);
+    if (bookIdx === -1) return;
+
+    if (direction === -1) {
+      if (chapter === 1) {
+        if (bookIdx > 0) {
+          const prevBook = BIBLE_BOOKS[bookIdx - 1].code;
+          setBook(prevBook);
+          setChapter(BIBLE_CHAPTER_COUNTS[prevBook] || 1);
+        }
+      } else {
+        setChapter(chapter - 1);
       }
-    } else {
-      setChapter(newChapter);
+    } else if (direction === 1) {
+      const maxChapters = BIBLE_CHAPTER_COUNTS[book] || 1;
+      if (chapter === maxChapters) {
+        if (bookIdx < BIBLE_BOOKS.length - 1) {
+          const nextBook = BIBLE_BOOKS[bookIdx + 1].code;
+          setBook(nextBook);
+          setChapter(1);
+        }
+      } else {
+        setChapter(chapter + 1);
+      }
     }
   };
 
@@ -750,6 +777,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     setVerseMenu(null);
   };
 
+  const isFirstChapter = book === "GEN" && chapter === 1;
+  const isLastChapter = book === "REV" && chapter === 22;
+
   return (
     <div className="flex flex-col h-full overflow-hidden relative bg-slate-50">
       <div
@@ -757,8 +787,11 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       >
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigateChapter(-1)}
-            className="p-1.5 rounded-md hover:bg-white/5 transition-colors cursor-pointer"
+            onClick={() => !isFirstChapter && navigateChapter(-1)}
+            disabled={isFirstChapter}
+            className={`p-1.5 rounded-md transition-colors ${
+              isFirstChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
+            }`}
             style={{ color: "var(--text-muted)" }}
           >
             <ChevronLeft size={18} />
@@ -783,8 +816,11 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           </div>
  
           <button
-            onClick={() => navigateChapter(1)}
-            className="p-1.5 rounded-md hover:bg-white/5 transition-colors cursor-pointer"
+            onClick={() => !isLastChapter && navigateChapter(1)}
+            disabled={isLastChapter}
+            className={`p-1.5 rounded-md transition-colors ${
+              isLastChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
+            }`}
             style={{ color: "var(--text-muted)" }}
           >
             <ChevronRight size={18} />
