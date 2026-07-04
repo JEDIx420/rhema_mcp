@@ -776,6 +776,29 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_url = urlparse(self.path)
         path = parsed_url.path
+        
+        if path.startswith("/documents/"):
+            filename = os.path.basename(path)
+            if filename.endswith(".pdf"):
+                pdf_dir = "/Users/vincyvincent/rhema_mcp/frontend/public/documents"
+                pdf_path = os.path.join(pdf_dir, filename)
+                if os.path.exists(pdf_path):
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/pdf')
+                    self.send_header('Content-Disposition', f'inline; filename="{filename}"')
+                    self.send_cors_headers()
+                    self.end_headers()
+                    with open(pdf_path, 'rb') as f:
+                        self.wfile.write(f.read())
+                    return
+                else:
+                    self.send_response(404)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "File not found"}).encode('utf-8'))
+                    return
+
         query_params = parse_qs(parsed_url.query)
 
         conn = get_db_connection()

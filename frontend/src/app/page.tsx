@@ -296,7 +296,7 @@ export default function Home() {
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="fixed top-6 right-6 z-50 px-4 py-2.5 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-full flex items-center gap-3 shadow-xl text-white font-sans"
+            className="fixed top-6 right-6 z-[2000] px-4 py-2.5 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-full flex items-center gap-3 shadow-xl text-white font-sans"
           >
             {isRecording ? (
               <>
@@ -325,7 +325,7 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className="fixed bottom-6 right-6 z-50 p-5 rounded-2xl border-2 border-dashed border-blue-400 bg-white/95 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center gap-2 pointer-events-auto"
+            className="fixed bottom-6 right-6 z-[2000] p-5 rounded-2xl border-2 border-dashed border-blue-400 bg-white/95 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center gap-2 pointer-events-auto"
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -375,7 +375,7 @@ export default function Home() {
 
       {/* 3. Floating Voice Dictation mic toggle */}
       <div 
-        className="fixed bottom-6 z-40 flex items-center gap-2 group/mic"
+        className="fixed bottom-6 z-[1900] flex items-center gap-2 group/mic"
         style={{ right: draggedVerse ? "260px" : "24px" }}
       >
         <span className="opacity-0 group-hover/mic:opacity-100 transition-opacity bg-slate-900/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-md pointer-events-none uppercase tracking-wider font-sans whitespace-nowrap">
@@ -397,14 +397,14 @@ export default function Home() {
       {/* STT Dictation Review Modal */}
       <AnimatePresence>
         {transcribedText !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/30 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-slate-900/30 backdrop-blur-xs">
             <div className="fixed inset-0" onClick={() => setTranscribedText(null)} />
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 50, scale: 0.95 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="bg-white border border-slate-200 shadow-2xl rounded-3xl w-full max-w-xl p-6 flex flex-col gap-4 font-sans z-10"
+              className="bg-white border border-slate-200 shadow-2xl rounded-3xl w-full max-w-xl p-6 flex flex-col gap-4 font-sans z-[3010]"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h4 className="font-extrabold text-lg text-slate-900 font-sans">

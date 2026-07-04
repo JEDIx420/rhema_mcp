@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Search, Loader2, BookMarked, BookOpen } from "lucide-react";
+import { Search, Loader2, BookMarked, BookOpen, Volume2 } from "lucide-react";
 import { searchLexicon, searchTopics } from "@/lib/api";
 
 export default function DictionaryView() {
@@ -12,6 +12,29 @@ export default function DictionaryView() {
   const [topicResults, setTopicResults] = useState<Record<string, string>[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+
+  const handleSpeakText = async (text: string, langCode: string, key: string) => {
+    try {
+      setSpeakingKey(key);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const res = await fetch(`${apiBase}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, language_code: langCode })
+      });
+      if (!res.ok) throw new Error("TTS failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+      audio.onended = () => setSpeakingKey(null);
+      audio.onerror = () => setSpeakingKey(null);
+    } catch (err) {
+      console.error("Speak failed", err);
+      setSpeakingKey(null);
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent, name: string, definition: string, source: string) => {
     const text = `[${source}] ${name}: ${definition}`;
@@ -125,11 +148,28 @@ export default function DictionaryView() {
                       onDragEnd={handleDragEnd}
                       className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-purple-300 cursor-grab active:cursor-grabbing"
                     >
-                      <div className="flex items-center gap-2.5 mb-3">
-                        <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                          {r.strongs_id}
-                        </span>
-                        <span className="text-base font-bold text-slate-900 font-sans">{r.lemma}</span>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                            {r.strongs_id}
+                          </span>
+                          <span className="text-base font-bold text-slate-900 font-sans">{r.lemma}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const isGreek = r.strongs_id?.toUpperCase().startsWith("G");
+                            const lang = isGreek ? "el" : "he";
+                            handleSpeakText(r.lemma, lang, `${r.strongs_id}-${i}`);
+                          }}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 ${
+                            speakingKey === `${r.strongs_id}-${i}`
+                              ? "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"
+                              : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-300"
+                          }`}
+                          title="Pronounce original word"
+                        >
+                          <Volume2 size={14} className={speakingKey === `${r.strongs_id}-${i}` ? "animate-[bounce_1.5s_infinite]" : ""} />
+                        </button>
                       </div>
                       <p className="text-[17px] leading-relaxed text-slate-700 bg-slate-50 p-5 rounded-xl border border-slate-200 font-prose whitespace-pre-line">
                         {r.definition}

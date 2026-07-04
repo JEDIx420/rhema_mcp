@@ -530,12 +530,28 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const activeTranslations = enabledTranslations.filter((t) => t.enabled);
 
   // Audio synthesis helper
-  const speakWord = (word: string, isGreek: boolean) => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = isGreek ? "el-GR" : "he-IL";
-      window.speechSynthesis.speak(utterance);
+  const speakWord = async (word: string, isGreek: boolean) => {
+    try {
+      const langCode = isGreek ? "el" : "he";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const res = await fetch(`${apiBase}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: word, language_code: langCode })
+      });
+      if (!res.ok) throw new Error("TTS failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+    } catch (err) {
+      console.error("speakWord failed, falling back to window.speechSynthesis", err);
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(word);
+        utterance.lang = isGreek ? "el-GR" : "he-IL";
+        window.speechSynthesis.speak(utterance);
+      }
     }
   };
 
