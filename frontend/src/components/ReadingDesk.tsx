@@ -380,7 +380,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
     try {
       setSpeakingKey(key);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
       const res = await fetch(`${apiBase}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -533,7 +533,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const speakWord = async (word: string, isGreek: boolean) => {
     try {
       const langCode = isGreek ? "el" : "he";
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
       const res = await fetch(`${apiBase}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -888,7 +888,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           <button
             onClick={async () => {
               try {
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
                 const res = await fetch(`${apiBase}/api/sessions/create`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },

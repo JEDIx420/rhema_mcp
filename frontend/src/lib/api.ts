@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
 
 export async function fetchChapter(book: string, chapter: number) {
   const res = await fetch(`${API_BASE}/api/read?book=${book}&chapter=${chapter}`);

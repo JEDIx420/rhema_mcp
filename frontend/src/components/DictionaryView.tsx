@@ -17,7 +17,7 @@ export default function DictionaryView() {
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
     try {
       setSpeakingKey(key);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
       const res = await fetch(`${apiBase}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -233,7 +233,7 @@ export default function SessionsView() {
       const res = await generateSessionPDF(selectedSession.session_id, titleInput, htmlContent);
       if (res.status === "success" && res.pdf_url) {
         // Since we are running in local source dev mode, prepend the server host
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
         const fullUrl = `${apiBase}${res.pdf_url}`;
         setExportUrl(fullUrl);
         // Auto trigger download

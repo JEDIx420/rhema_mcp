@@ -123,7 +123,7 @@ export default function Home() {
         reader.onloadend = async () => {
           const base64Data = (reader.result as string).split(",")[1];
           try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
             const res = await fetch(`${apiBase}/api/stt`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
