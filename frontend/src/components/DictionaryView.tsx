@@ -13,6 +13,21 @@ export default function DictionaryView() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  const handleDragStart = (e: React.DragEvent, name: string, definition: string, source: string) => {
+    const text = `[${source}] ${name}: ${definition}`;
+    const refId = `[DICT] ${name}`;
+    e.dataTransfer.setData("text/plain", text);
+    e.dataTransfer.setData("application/verse-id", refId);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: refId, verseText: text } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleDragEnd = () => {
+    const dragEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEvent);
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -105,7 +120,10 @@ export default function DictionaryView() {
                       key={i}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-purple-300"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e as any, r.lemma, r.definition, `Strong's ${r.strongs_id}`)}
+                      onDragEnd={handleDragEnd}
+                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-purple-300 cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex items-center gap-2.5 mb-3">
                         <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
@@ -134,7 +152,10 @@ export default function DictionaryView() {
                       key={i}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-sky-300"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e as any, r.name, r.definition_text, "Easton/Smith Dictionary")}
+                      onDragEnd={handleDragEnd}
+                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-sky-300 cursor-grab active:cursor-grabbing"
                     >
                       <div className="font-bold text-base text-slate-950 mb-2 font-sans">{r.name}</div>
                       <p className="text-[17px] leading-relaxed text-slate-700 bg-slate-50 p-5 rounded-xl border border-slate-200 font-prose line-clamp-4 hover:line-clamp-none transition-all duration-300">
@@ -158,7 +179,10 @@ export default function DictionaryView() {
                       key={i}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-blue-300"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e as any, r.subject, r.entry, "Nave's Topical Index")}
+                      onDragEnd={handleDragEnd}
+                      className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-blue-300 cursor-grab active:cursor-grabbing"
                     >
                       <div className="font-bold text-base text-blue-600 mb-2 font-sans">{r.subject}</div>
                       <p className="text-[17px] leading-relaxed text-slate-700 bg-slate-50 p-5 rounded-xl border border-slate-200 font-prose italic">

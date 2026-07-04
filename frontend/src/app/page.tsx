@@ -295,18 +295,25 @@ export default function Home() {
       </AnimatePresence>
 
       {/* 3. Floating Voice Dictation mic toggle */}
-      <button
-        onClick={isRecording ? stopRecording : startRecording}
-        className={`fixed bottom-6 z-40 p-4.5 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center border border-white/20 ${
-          isRecording 
-            ? "bg-red-600 text-white animate-pulse" 
-            : "bg-blue-600 text-white hover:bg-blue-700"
-        }`}
-        title={isRecording ? "Stop dictation" : "Start speech dictation"}
+      <div 
+        className="fixed bottom-6 z-40 flex items-center gap-2 group/mic"
         style={{ right: draggedVerse ? "260px" : "24px" }}
       >
-        <Mic size={22} />
-      </button>
+        <span className="opacity-0 group-hover/mic:opacity-100 transition-opacity bg-slate-900/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-md pointer-events-none uppercase tracking-wider font-sans whitespace-nowrap">
+          {isRecording ? "Recording... Click to Stop" : "Voice Dictation"}
+        </span>
+        <button
+          onClick={isRecording ? stopRecording : startRecording}
+          className={`p-4.5 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center border border-white/20 ${
+            isRecording 
+              ? "bg-red-600 text-white animate-pulse" 
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+          title={isRecording ? "Stop dictation" : "Start speech dictation"}
+        >
+          <Mic size={22} />
+        </button>
+      </div>
     </div>
   );
 }

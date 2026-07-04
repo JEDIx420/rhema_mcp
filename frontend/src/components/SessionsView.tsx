@@ -283,7 +283,7 @@ export default function SessionsView() {
                 minute: "2-digit"
               });
               return (
-                <button
+                <div
                   key={s.session_id}
                   onClick={() => setSelectedSession(s)}
                   className="w-full text-left p-3.5 rounded-xl transition-all flex items-start gap-3 cursor-pointer border border-transparent hover:border-slate-200 group/item font-sans"
@@ -308,7 +308,7 @@ export default function SessionsView() {
                   >
                     <Trash2 size={14} />
                   </button>
-                </button>
+                </div>
               );
             })
           )}

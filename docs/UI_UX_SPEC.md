@@ -148,23 +148,28 @@ A dual-pane research center integrating fast queries and instant exegesis:
 
 ### G. Interactive "Sessions" Note Workspace (`SessionsView.tsx`)
 A split-pane research note manager integrating rich text composition, voice transcribing, and drag-and-drop scripture quoting:
-*   **Left Panel (Sessions Browser)**: Lists saved study logs displaying titles and formatted modification timestamps, filtered in real-time by a search input using FTS5 virtual indexing, with an option to create new sessions.
+*   **Left Panel (Sessions Browser)**: Lists saved study logs displaying titles and formatted modification timestamps, filtered in real-time by a search input using FTS5 virtual indexing. Features an improved layout that fixes nested button hydration console errors by converting card items to standard pointer divs.
 *   **Right Panel (TipTap Editor)**: Renders a spacious rich-text canvas using TipTap styled with custom typography, auto-saving modifications to the database after 1.5s of inactivity.
 *   **Compile to PDF Action**: Exports note documents to beautiful PDFs compiled by ReportLab flowables, downloading the file automatically.
-*   **Drag-to-Save Dropzone**: Verses from the Reading Desk can be dragged directly into the editor pane, rendering a custom-styled quote block.
+*   **Drag-to-Save Dropzone**: Verses from the Reading Desk, geographical locations, search results, timeline milestones, dictionary results, and commentary entries can be dragged directly into the editor pane, rendering a custom-styled quote block or structured observation card.
 
 ---
 
 ### H. Multi-State Floating Overlays & Workspace Router (`page.tsx`)
 Global overlays positioned with absolute layouts over the viewports:
-*   **Magnetic Drop Zone**: During verse dragging, a glassmorphic target appears in the bottom right corner. Dropping the verse here immediately appends a blockquote to the latest study session.
+*   **Magnetic Drop Zone**: During dragging of any study element (verses, locations, dictionary terms, search cards, commentaries, timeline milestones), a glassmorphic target appears in the bottom right corner. Dropping the element here immediately appends a formatted quote block to the latest study session.
 *   **Listening Pill Waveform**: During STT microphone recording, a dark glassmorphic badge appears in the top corner featuring a looping height-animated audio waveform.
-*   **Floating Mic Button**: A floating circle button in the bottom right corner of the screen toggles STT speech dictation start/stop.
+*   **Floating Mic Button**: A floating circle button in the bottom right corner of the screen toggles STT speech dictation start/stop. Displays an elegant hover tooltip/label detailing the action context.
 
 ---
 
-### I. Command Center Launcher (`CommandCenter.tsx`)
+### I. Exegesis Drawer Sessions Integration (`StudyPane.tsx`)
+*   **Sessions Tab**: A dedicated study tab displaying a switcher dropdown to toggle between active sessions, a "+ Create" input field to instantiate logs instantly, a read-only live HTML preview of the active session's contents, and a bottom text input box to quickly type and append exegesis observations.
+*   **Broad Drag Support**: Matthew Henry commentaries, voters cross-references, and lexicon concordance occurrence cards are draggable, allowing users to drop them into the TipTap Editor or the Magnetic Drop Zone.
+
+---
+
+### J. Command Center Launcher (`CommandCenter.tsx`)
 *   **Input Trigger**: Activated via `Cmd+K` or `Ctrl+K` globally.
 *   **Backdrop**: Backdrop blur overlay spanning the whole viewport.
 *   **Syntax Actions**: Matches `/read [ref]`, `/find [keyword]`, `/dict [term]`, and `/bio [person]` inputs to instantly trigger corresponding state transitions in the main views.
-

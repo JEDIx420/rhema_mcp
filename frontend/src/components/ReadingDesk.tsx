@@ -16,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   Check,
+  Plus,
 } from "lucide-react";
 import { fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
@@ -866,7 +867,34 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
           {/* Vertical Divider */}
           <div className="w-px h-5 bg-slate-200 mx-1" />
- 
+
+          {/* Quick Create Session button */}
+          <button
+            onClick={async () => {
+              try {
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+                const res = await fetch(`${apiBase}/api/sessions/create`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ title: "New Reading Session", content: "" })
+                }).then(r => r.json());
+                
+                if (res.session_id) {
+                  window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                  if (props.onViewChange) props.onViewChange("sessions");
+                }
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-all font-sans shadow-sm"
+            title="Create new study session"
+            style={{ fontFamily: "var(--font-outfit), sans-serif" }}
+          >
+            <Plus size={15} className="text-blue-600" />
+            <span>+ Session</span>
+          </button>
+
           {/* Languages Dropdown */}
           <div className="relative">
             <button
@@ -1027,7 +1055,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                                 const langCode = t.key.replace("text_", "");
                                 handleSpeakText(text, langCode, `${v.id}-${t.key}`);
                               }}
-                              className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 opacity-0 group-hover/col:opacity-100 ${
+                              className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 opacity-50 group-hover/col:opacity-100 ${
                                 speakingKey === `${v.id}-${t.key}` ? "text-blue-600 bg-blue-50 opacity-100!" : "text-slate-400 hover:text-slate-700"
                               }`}
                               title="Listen to translation"

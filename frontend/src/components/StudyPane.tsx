@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
+import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
+import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
 import { getBookName } from "@/lib/books";
 
 interface MorphologyWord {
@@ -156,8 +156,105 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verseData, setVerseData] = useState<VerseDetail | null>(null);
-  const [activeTab, setActiveTab] = useState<"verse" | "lexicon">("verse");
+  const [activeTab, setActiveTab] = useState<"verse" | "lexicon" | "sessions">("sessions"); // default active to sessions so users instantly see their log!
   const [activeLexiconWord, setActiveLexiconWord] = useState<string | null>(null);
+
+  interface StudyPaneSession {
+    session_id: string;
+    title: string;
+    content: string;
+    updated_at: string;
+  }
+
+  // Sessions log states
+  const [studySessions, setStudySessions] = useState<StudyPaneSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [newSessionTitle, setNewSessionTitle] = useState("");
+  const [quickNote, setQuickNote] = useState("");
+
+  const loadStudyPaneSessions = async () => {
+    Promise.resolve().then(() => {
+      setSessionsLoading(true);
+    });
+    try {
+      const res = await fetchSessions();
+      const list = res.sessions || [];
+      setStudySessions(list);
+      if (list.length > 0 && !selectedSessionId) {
+        setSelectedSessionId(list[0].session_id);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const handleCreateSessionInPane = async () => {
+    if (!newSessionTitle.trim()) return;
+    try {
+      const res = await createSession(newSessionTitle.trim(), "");
+      setNewSessionTitle("");
+      await loadStudyPaneSessions();
+      setSelectedSessionId(res.session_id);
+      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddQuickNote = async () => {
+    if (!selectedSessionId || !quickNote.trim()) return;
+    const active = studySessions.find(s => s.session_id === selectedSessionId);
+    if (!active) return;
+    try {
+      const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const noteHtml = `<p><strong>[${timestamp}]</strong>: ${quickNote.trim()}</p>`;
+      const updatedContent = (active.content || "") + noteHtml;
+      await updateSession(selectedSessionId, active.title, updatedContent);
+      setQuickNote("");
+      await loadStudyPaneSessions();
+      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "sessions") {
+      Promise.resolve().then(() => {
+        loadStudyPaneSessions();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleSessionUpdated = () => {
+      if (activeTab === "sessions") {
+        Promise.resolve().then(() => {
+          loadStudyPaneSessions();
+        });
+      }
+    };
+    window.addEventListener("rhema-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("rhema-session-updated", handleSessionUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleStudyPaneDragStart = (e: React.DragEvent, id: string, text: string) => {
+    e.dataTransfer.setData("text/plain", text);
+    e.dataTransfer.setData("application/verse-id", id);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: id, verseText: text } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleStudyPaneDragEnd = () => {
+    const dragEndEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEndEvent);
+  };
 
   // Lexicon states
   const [lexiconData, setLexiconData] = useState<LexiconItem[]>([]);
@@ -332,6 +429,17 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
             LEXICON
           </button>
         )}
+        <button
+          onClick={() => setActiveTab("sessions")}
+          className={`flex-1 py-4 text-center border-b-2 font-sans transition-all cursor-pointer ${
+            activeTab === "sessions"
+              ? "text-blue-600 border-blue-600 font-bold"
+              : "text-slate-500 border-transparent hover:text-slate-850"
+          }`}
+          style={{ color: activeTab === "sessions" ? "#2563eb" : undefined, borderColor: activeTab === "sessions" ? "#2563eb" : undefined }}
+        >
+          SESSIONS
+        </button>
       </div>
 
       {/* Pane Content */}
@@ -356,7 +464,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                 {verseData.commentaries.map((c, i) => (
                   <p
                     key={i}
-                    className="text-[16px] leading-relaxed p-4 rounded-xl border border-slate-200 bg-slate-55 text-slate-700 font-prose whitespace-pre-line mb-3"
+                    draggable
+                    onDragStart={(e) => handleStudyPaneDragStart(e, `Commentary: ${verseId}`, c.text)}
+                    onDragEnd={handleStudyPaneDragEnd}
+                    className="text-[16px] leading-relaxed p-4 rounded-xl border border-slate-200 bg-slate-55 text-slate-700 font-prose whitespace-pre-line mb-3 cursor-grab active:cursor-grabbing"
                   >
                     {c.text}
                   </p>
@@ -378,7 +489,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   {verseData.cross_references.map((cr) => (
                     <div
                       key={cr.to_verse}
-                      className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs flex flex-col gap-2"
+                      draggable
+                      onDragStart={(e) => handleStudyPaneDragStart(e, cr.to_verse, cr.text_en || "")}
+                      onDragEnd={handleStudyPaneDragEnd}
+                      className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs flex flex-col gap-2 cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex items-center justify-between w-full">
                         <button
@@ -543,16 +657,19 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
               ) : occurrences.length > 0 ? (
                 <div className="flex flex-col gap-3">
                   {occurrences.slice(0, 15).map((o) => (
-                    <button
+                    <div
                       key={o.id}
+                      draggable
+                      onDragStart={(e) => handleStudyPaneDragStart(e, o.id, o.text_en)}
+                      onDragEnd={handleStudyPaneDragEnd}
                       onClick={() => onVerseClick?.(o.id)}
-                      className="text-left p-3.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-all cursor-pointer shadow-xs block w-full"
+                      className="text-left p-3.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-all cursor-grab active:cursor-grabbing shadow-xs block w-full"
                     >
                       <div className="font-semibold text-blue-600 text-xs font-sans mb-1">
                         {getBookName(o.book)} {o.chapter}:{o.verse}
                       </div>
                       <div className="text-slate-700 text-xs leading-relaxed font-prose line-clamp-2">{o.text_en}</div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -561,6 +678,99 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "sessions" && (
+          <div className="space-y-4 flex flex-col h-full min-h-0">
+            {/* Active Log Select dropdown */}
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">
+                Active Study Log
+              </label>
+              <select
+                value={selectedSessionId || ""}
+                onChange={(e) => setSelectedSessionId(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm cursor-pointer font-sans"
+              >
+                {studySessions.length === 0 ? (
+                  <option value="">No sessions available</option>
+                ) : (
+                  studySessions.map((s) => (
+                    <option key={s.session_id} value={s.session_id}>
+                      {s.title}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Quick Session Create */}
+            <div className="flex gap-2 shrink-0">
+              <input
+                type="text"
+                placeholder="New log title..."
+                value={newSessionTitle}
+                onChange={(e) => setNewSessionTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateSessionInPane();
+                }}
+                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-sans"
+              />
+              <button
+                onClick={handleCreateSessionInPane}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3 py-2 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 shrink-0 font-sans"
+              >
+                <Plus size={13} />
+                <span>Create</span>
+              </button>
+            </div>
+
+            {/* Preview of active session content */}
+            {sessionsLoading ? (
+              <div className="flex-1 flex items-center justify-center py-10 shrink-0">
+                <Loader2 size={20} className="animate-spin text-blue-500" />
+              </div>
+            ) : selectedSessionId ? (
+              <div className="flex-1 flex flex-col min-h-[220px] bg-slate-50 rounded-xl border border-slate-200/60 p-4 overflow-y-auto">
+                <div className="font-extrabold text-sm text-slate-900 border-b border-slate-200/50 pb-2 mb-2 flex items-center gap-1.5 font-sans">
+                  <Notebook size={14} className="text-blue-500" />
+                  <span>{studySessions.find(s => s.session_id === selectedSessionId)?.title}</span>
+                </div>
+                <div
+                  className="text-slate-700 text-sm leading-relaxed prose prose-sm font-sans flex-1 overflow-y-auto"
+                  dangerouslySetInnerHTML={{
+                    __html: studySessions.find(s => s.session_id === selectedSessionId)?.content || "<p class='text-slate-400 italic font-sans'>No notes logged in this session yet. Drag scripture verses or type a note below!</p>"
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-dashed border-slate-200 rounded-xl text-slate-400 text-xs italic font-sans min-h-[150px]">
+                Create a study log to start taking exegesis notes.
+              </div>
+            )}
+
+            {/* Quick Note Add */}
+            {selectedSessionId && (
+              <div className="flex gap-2 shrink-0 pt-2 border-t border-slate-100">
+                <input
+                  type="text"
+                  placeholder="Type a quick study note..."
+                  value={quickNote}
+                  onChange={(e) => setQuickNote(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddQuickNote();
+                  }}
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-sans"
+                />
+                <button
+                  onClick={handleAddQuickNote}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 font-sans"
+                >
+                  Add Note
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

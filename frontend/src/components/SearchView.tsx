@@ -34,6 +34,19 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
   const [availableBooks, setAvailableBooks] = useState<string[]>([]);
   const [availableTestaments, setAvailableTestaments] = useState<string[]>([]);
 
+  const handleDragStart = (e: React.DragEvent, verseId: string, verseText: string) => {
+    e.dataTransfer.setData("text/plain", verseText);
+    e.dataTransfer.setData("application/verse-id", verseId);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId, verseText } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleDragEnd = () => {
+    const dragEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEvent);
+  };
+
   const limit = 50;
 
   const triggerSearch = async (
@@ -252,8 +265,11 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(i * 0.015, 0.2) }}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e as any, r.id, r.text_en)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => setSelectedVerseId(r.id)}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 text-left select-none ${
+                      className={`p-4 rounded-xl border transition-all flex flex-col gap-2 text-left select-none cursor-grab active:cursor-grabbing ${
                         isSelected
                           ? "ring-2 ring-blue-500 bg-blue-50/30 border-blue-400"
                           : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"

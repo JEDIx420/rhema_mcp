@@ -315,6 +315,21 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, placeName: string, lat: number | null, lng: number | null, verseId?: string) => {
+    const text = `${placeName}${lat != null && lng != null ? ` (Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)})` : ""}${verseId ? ` - Referenced in ${verseId}` : ""}`;
+    const refId = `[PLACE] ${placeName}`;
+    e.dataTransfer.setData("text/plain", text);
+    e.dataTransfer.setData("application/verse-id", refId);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: refId, verseText: text } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleDragEnd = () => {
+    const dragEndEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEndEvent);
+  };
+
   const handleRoutePointClick = (point: RoutePoint) => {
     setSelectedRoutePoint(point);
     if (point.latitude == null || point.longitude == null) return;
@@ -424,10 +439,13 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                 {places.map((place, idx) => {
                   const isSelected = selectedPlace === place;
                   return (
-                    <button
+                    <div
                       key={idx}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, place.name, place.latitude, place.longitude, place.verse_id)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => handlePlaceSelect(place)}
-                      className="w-full text-left p-3.5 rounded-xl text-base hover:bg-slate-50 transition-all flex items-start gap-3 cursor-pointer border border-transparent hover:border-slate-200 font-sans"
+                      className="w-full text-left p-3.5 rounded-xl text-base hover:bg-slate-50 transition-all flex items-start gap-3 cursor-grab active:cursor-grabbing border border-transparent hover:border-slate-200 font-sans"
                       style={{
                         background: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
                         borderColor: isSelected ? "rgba(37, 99, 235, 0.2)" : "transparent",
@@ -450,7 +468,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                           </span>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -478,10 +496,13 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                 {routePoints.map((point) => {
                   const isSelected = selectedRoutePoint === point;
                   return (
-                    <button
+                    <div
                       key={point.sequence_order}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, point.place_name, point.latitude, point.longitude, point.associated_verse_id || undefined)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => handleRoutePointClick(point)}
-                      className="w-full text-left p-3.5 rounded-xl text-base hover:bg-slate-50 transition-all flex items-start gap-3 cursor-pointer border border-transparent hover:border-slate-200 font-sans"
+                      className="w-full text-left p-3.5 rounded-xl text-base hover:bg-slate-50 transition-all flex items-start gap-3 cursor-grab active:cursor-grabbing border border-transparent hover:border-slate-200 font-sans"
                       style={{
                         background: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
                         borderColor: isSelected ? "rgba(37, 99, 235, 0.2)" : "transparent",
@@ -491,7 +512,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                         {point.sequence_order}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-900 truncate flex items-center justify-between font-sans font-sans">
+                        <div className="font-bold text-slate-900 truncate flex items-center justify-between font-sans">
                           <span>{point.place_name}</span>
                         </div>
                         {point.associated_verse_id && (
@@ -503,7 +524,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                           </div>
                         )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

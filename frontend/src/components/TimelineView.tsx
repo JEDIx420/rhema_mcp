@@ -72,6 +72,22 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
     });
   }, [events, scrubYear]);
 
+  const handleDragStart = (e: React.DragEvent, title: string, year: number, location: string, description: string) => {
+    const yrStr = year < 0 ? `${Math.abs(year)} BC` : `AD ${year}`;
+    const text = `${title} (${yrStr})${location ? ` - Location: ${location}` : ""} - ${description}`;
+    const refId = `[EVENT] ${title}`;
+    e.dataTransfer.setData("text/plain", text);
+    e.dataTransfer.setData("application/verse-id", refId);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: refId, verseText: text } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleDragEnd = () => {
+    const dragEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEvent);
+  };
+
   const handleGoToReference = (verseId: string) => {
     if (!verseId) return;
     const parts = verseId.split(".");
@@ -125,8 +141,11 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                   return (
                     <div 
                       key={item.event_id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, item.title, item.year, item.location, item.description)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => setScrubYear(item.year)}
-                      className="flex flex-col items-center cursor-pointer group relative w-36"
+                      className="flex flex-col items-center cursor-grab active:cursor-grabbing group relative w-36"
                     >
                       {/* Timeline Dot Indicator */}
                       <motion.div 
@@ -233,10 +252,13 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                 {events.map((item) => {
                   const isClosest = closestEvent?.event_id === item.event_id;
                   return (
-                    <button
+                    <div
                       key={item.event_id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, item.title, item.year, item.location, item.description)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => setScrubYear(item.year)}
-                      className="w-full text-left p-4.5 rounded-2xl border transition-all flex items-start gap-4 cursor-pointer hover:bg-slate-50/50"
+                      className="w-full text-left p-4.5 rounded-2xl border transition-all flex items-start gap-4 cursor-grab active:cursor-grabbing hover:bg-slate-50/50"
                       style={{
                         background: isClosest ? "rgba(37, 99, 235, 0.04)" : "transparent",
                         borderColor: isClosest ? "rgba(37, 99, 235, 0.2)" : "rgba(15, 23, 42, 0.05)",
@@ -255,7 +277,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                           {item.location}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
