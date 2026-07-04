@@ -121,6 +121,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
       const group: any[] = [];
 
       places.forEach((place) => {
+        if (place.latitude == null || place.longitude == null) return;
         const popupContent = `
           <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.5; color: #1e293b; max-width: 280px; padding: 4px;">
             <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px; gap: 8px;">
@@ -252,7 +253,11 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
                       </div>
                       <div className="text-sm text-slate-500 mt-1 flex items-center justify-between font-sans">
                         <span>Ref: <strong className="text-blue-600">{place.verse_id}</strong></span>
-                        <span className="font-mono text-xs text-slate-400">{place.latitude.toFixed(2)}, {place.longitude.toFixed(2)}</span>
+                        <span className="font-mono text-xs text-slate-400">
+                          {place.latitude != null && place.longitude != null 
+                            ? `${place.latitude.toFixed(2)}, ${place.longitude.toFixed(2)}` 
+                            : "No coordinates"}
+                        </span>
                       </div>
                     </div>
                   </button>
