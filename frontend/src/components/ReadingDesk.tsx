@@ -373,6 +373,44 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const [studyInitialTab, setStudyInitialTab] = useState<"verse" | "lexicon">("verse");
   const [studyInitialWord, setStudyInitialWord] = useState<string | null>(null);
 
+
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+
+  const handleSpeakText = async (text: string, langCode: string, key: string) => {
+    try {
+      setSpeakingKey(key);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
+      const res = await fetch(`${apiBase}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, language_code: langCode })
+      });
+      if (!res.ok) throw new Error("TTS failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+      audio.onended = () => setSpeakingKey(null);
+      audio.onerror = () => setSpeakingKey(null);
+    } catch (err) {
+      console.error("Speak failed", err);
+      setSpeakingKey(null);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, verseId: string, verseText: string) => {
+    e.dataTransfer.setData("text/plain", verseText);
+    e.dataTransfer.setData("application/verse-id", verseId);
+    e.dataTransfer.effectAllowed = "copy";
+    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId, verseText } });
+    window.dispatchEvent(dragEvent);
+  };
+
+  const handleDragEnd = () => {
+    const dragEndEvent = new CustomEvent("rhema-drag-end");
+    window.dispatchEvent(dragEndEvent);
+  };
+
   // Modal Lexicon state (used when clicking word from reader body)
   const [selectedLexiconModalWord, setSelectedLexiconModalWord] = useState<any | null>(null);
 
@@ -940,7 +978,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                   <motion.div
                     key={v.id}
                     layout
-                    className="group rounded-lg p-3 transition-all duration-150"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e as any, v.id, v.text_en)}
+                    onDragEnd={handleDragEnd}
+                    className="group rounded-lg p-3 transition-all duration-150 cursor-grab active:cursor-grabbing"
                     style={{
                       background: isSelected ? "rgba(52, 211, 153, 0.05)" : "transparent",
                     }}
@@ -956,25 +997,43 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                       }}
                     >
                       {activeTranslations.map((t, idx) => (
-                        <div key={t.key} className={`flex items-start ${idx > 0 ? "pl-5" : ""}`}>
-                          <button
-                            onClick={(e) => handleVerseNumberClick(e, v)}
-                            className="text-xs font-bold mr-2.5 mt-0.5 select-none hover:text-blue-600 cursor-context-menu shrink-0"
-                            style={{ color: "var(--primary)" }}
-                          >
-                            {v.verse}
-                          </button>
-                          {t.key === "text_original" ? (
-                            renderOriginalText(v)
-                          ) : t.key === "text_en" ? (
-                            renderEnglishTextWithHover(v)
-                          ) : (
-                            <span
-                              className="leading-relaxed"
-                              style={{ fontSize: `${textSize}px`, color: "var(--text-primary)" }}
+                        <div key={t.key} className={`flex items-start justify-between group/col ${idx > 0 ? "pl-5" : ""} ${speakingKey === `${v.id}-${t.key}` ? "ring-2 ring-blue-500/20 rounded-lg bg-blue-50/10 p-1 -m-1" : ""}`}>
+                          <div className="flex items-start">
+                            <button
+                              onClick={(e) => handleVerseNumberClick(e, v)}
+                              className="text-xs font-bold mr-2.5 mt-0.5 select-none hover:text-blue-600 cursor-context-menu shrink-0"
+                              style={{ color: "var(--primary)" }}
                             >
-                              {(v as any)[t.key] || "—"}
-                            </span>
+                              {v.verse}
+                            </button>
+                            {t.key === "text_original" ? (
+                              renderOriginalText(v)
+                            ) : t.key === "text_en" ? (
+                              renderEnglishTextWithHover(v)
+                            ) : (
+                              <span
+                                className="leading-relaxed"
+                                style={{ fontSize: `${textSize}px`, color: "var(--text-primary)" }}
+                              >
+                                {(v as any)[t.key] || "—"}
+                              </span>
+                            )}
+                          </div>
+                          {t.key !== "text_original" && ((v as any)[t.key] || t.key === "text_en") && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const text = t.key === "text_en" ? v.text_en : (v as any)[t.key];
+                                const langCode = t.key.replace("text_", "");
+                                handleSpeakText(text, langCode, `${v.id}-${t.key}`);
+                              }}
+                              className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 opacity-0 group-hover/col:opacity-100 ${
+                                speakingKey === `${v.id}-${t.key}` ? "text-blue-600 bg-blue-50 opacity-100!" : "text-slate-400 hover:text-slate-700"
+                              }`}
+                              title="Listen to translation"
+                            >
+                              <Volume2 size={13} className={speakingKey === `${v.id}-${t.key}` ? "animate-pulse" : ""} />
+                            </button>
                           )}
                         </div>
                       ))}

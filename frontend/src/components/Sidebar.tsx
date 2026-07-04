@@ -10,6 +10,7 @@ import {
   Users,
   BookMarked,
   Settings,
+  Notebook,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { id: "timeline", label: "Timeline", icon: Clock },
   { id: "people", label: "People", icon: Users },
   { id: "dictionary", label: "Dictionary", icon: BookMarked },
+  { id: "sessions", label: "Sessions", icon: Notebook },
 ];
 
 export default function Sidebar({

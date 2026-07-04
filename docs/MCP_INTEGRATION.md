@@ -59,3 +59,14 @@ The server registers the following tools for the LLM client:
     *   `book` (string, required): 3-letter uppercase book code.
     *   `chapter` (integer, required): Chapter number.
 *   **Returns**: List of locations with latitudes/longitudes and the verses referencing them.
+
+### 7. `list_geography_routes`
+*   **Description**: Retrieve the list of sequential biblical journeys (e.g. Abraham's Journey, Exodus Journey).
+*   **Arguments**: None.
+*   **Returns**: List of routes containing `route_id`, `title`, and `description`.
+
+### 8. `get_route_points`
+*   **Description**: Retrieve sequential coordinates for a specific biblical route path.
+*   **Arguments**:
+    *   `route_id` (string, required): The journey route ID.
+*   **Returns**: List of points ordered by `sequence_order` containing latitude, longitude, and description.

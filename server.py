@@ -11,6 +11,107 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def compile_html_to_pdf(html_content: str, title: str, output_path: str):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    import re
+
+    doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    story = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=22,
+        leading=26,
+        textColor='#1e293b',
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+    
+    h2_style = ParagraphStyle(
+        'DocH2',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=15,
+        leading=18,
+        textColor='#2563eb',
+        spaceBefore=12,
+        spaceAfter=6
+    )
+
+    h3_style = ParagraphStyle(
+        'DocH3',
+        parent=styles['Heading3'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=15,
+        textColor='#0f172a',
+        spaceBefore=10,
+        spaceAfter=4
+    )
+
+    body_style = ParagraphStyle(
+        'DocBody',
+        parent=styles['BodyText'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+        textColor='#334155',
+        spaceAfter=8
+    )
+
+    quote_style = ParagraphStyle(
+        'DocQuote',
+        parent=styles['BodyText'],
+        fontName='Helvetica-Oblique',
+        fontSize=9.5,
+        leading=13,
+        textColor='#475569',
+        leftIndent=15,
+        spaceAfter=10
+    )
+
+    story.append(Paragraph(title, title_style))
+    story.append(Spacer(1, 10))
+
+    # Parse simple HTML tags
+    blocks = re.split(r'(</?(?:h1|h2|h3|p|li|blockquote|ul|ol)>)', html_content)
+    
+    current_tag = None
+    for item in blocks:
+        if not item:
+            continue
+        item_lower = item.lower()
+        if item_lower in ['<h1>', '<h2>', '<h3>', '<p>', '<li>', '<blockquote>', '<ul>', '<ol>']:
+            current_tag = item_lower
+            continue
+        elif item_lower in ['</h1>', '</h2>', '</h3>', '</p>', '</li>', '</blockquote>', '</ul>', '</ol>']:
+            current_tag = None
+            continue
+        
+        # Clean text
+        text = re.sub(r'<[^>]+>', '', item).strip()
+        if not text:
+            continue
+            
+        if current_tag == '<h2>':
+            story.append(Paragraph(text, h2_style))
+        elif current_tag == '<h3>':
+            story.append(Paragraph(text, h3_style))
+        elif current_tag == '<blockquote>':
+            story.append(Paragraph(text, quote_style))
+        elif current_tag == '<li>':
+            story.append(Paragraph(f"&bull; {text}", body_style))
+        else:
+            story.append(Paragraph(text, body_style))
+
+    doc.build(story)
+
 @mcp.tool()
 def search_scriptures(query: str, book: str = None) -> str:
     """
@@ -277,6 +378,65 @@ def get_biography(person_id: str) -> str:
         conn.close()
 
 @mcp.tool()
+def list_geography_routes() -> str:
+    """
+    Retrieve a list of available historical biblical routes/journeys (e.g. Abraham's journey, Exodus, Paul's missionary trips).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT route_id, title, description FROM geography_routes ORDER BY route_id")
+        rows = cursor.fetchall()
+        if not rows:
+            return "No historical routes found in the database."
+        output = ["=== Historical Biblical Routes ==="]
+        for r in rows:
+            output.append(f"- ID: {r['route_id']} | Title: {r['title']}")
+            if r['description']:
+                output.append(f"  Description: {r['description']}")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error listing routes: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
+def get_route_points(route_id: str) -> str:
+    """
+    Retrieve the ordered list of coordinates, place names, and scripture references for a specific route ID.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check route details
+        cursor.execute("SELECT title, description FROM geography_routes WHERE route_id = ?", (route_id.lower(),))
+        route = cursor.fetchone()
+        if not route:
+            return f"Route '{route_id}' not found."
+
+        cursor.execute("""
+            SELECT sequence_order, latitude, longitude, place_name, associated_verse_id
+            FROM route_points
+            WHERE route_id = ?
+            ORDER BY sequence_order
+        """, (route_id.lower(),))
+        rows = cursor.fetchall()
+
+        output = [f"=== Route: {route['title']} ==="]
+        if route['description']:
+            output.append(route['description'])
+        output.append("")
+
+        for r in rows:
+            ref_str = f" (Ref: {r['associated_verse_id']})" if r['associated_verse_id'] else ""
+            output.append(f"{r['sequence_order']}. {r['place_name']}{ref_str} at Coordinates: ({r['latitude']}, {r['longitude']})")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error getting route points: {e}"
+    finally:
+        conn.close()
+
+@mcp.tool()
 def get_chapter_map_data(book: str, chapter: int) -> str:
     """
     Retrieve geocoded coordinates and place names mentioned in a specific book and chapter (e.g. book='GEN', chapter=12).
@@ -403,13 +563,215 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
 
     def send_cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type')
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_cors_headers()
         self.end_headers()
+
+    def do_POST(self):
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length)
+        
+        data = {}
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        response_data = {"error": "Endpoint not found"}
+        status_code = 404
+        is_binary = False
+        binary_data = b""
+        response_content_type = 'application/json'
+        
+        try:
+            if path == "/api/sessions/create":
+                import uuid
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                title = data.get("title", "Untitled Session")
+                content = data.get("content", "")
+                session_id = str(uuid.uuid4())
+                
+                cursor.execute("""
+                    INSERT INTO sessions (session_id, title, content)
+                    VALUES (?, ?, ?)
+                """, (session_id, title, content))
+                conn.commit()
+                
+                response_data = {"status": "success", "session_id": session_id, "title": title, "content": content}
+                status_code = 200
+
+            elif path == "/api/sessions/update":
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                session_id = data.get("session_id")
+                title = data.get("title")
+                content = data.get("content")
+                
+                if session_id:
+                    cursor.execute("""
+                        UPDATE sessions
+                        SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE session_id = ?
+                    """, (title, content, session_id))
+                    conn.commit()
+                    response_data = {"status": "success", "session_id": session_id}
+                    status_code = 200
+                else:
+                    response_data = {"error": "Missing session_id"}
+                    status_code = 400
+
+            elif path == "/api/sessions/delete":
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                session_id = data.get("session_id")
+                
+                if session_id:
+                    cursor.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+                    conn.commit()
+                    response_data = {"status": "success", "session_id": session_id}
+                    status_code = 200
+                else:
+                    response_data = {"error": "Missing session_id"}
+                    status_code = 400
+
+            elif path == "/api/tts":
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                text = data.get("text", "")
+                language_code = data.get("language_code", "en")
+                
+                if text:
+                    if language_code == "en":
+                        import tempfile
+                        import subprocess
+                        import os
+                        
+                        temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
+                        os.close(temp_fd)
+                        try:
+                            subprocess.run([
+                                "say",
+                                "-o", temp_path,
+                                "--file-format=WAVE",
+                                "--data-format=LEI16@22050",
+                                text
+                            ], check=True)
+                            
+                            with open(temp_path, "rb") as f:
+                                binary_data = f.read()
+                            is_binary = True
+                            response_content_type = "audio/wav"
+                            status_code = 200
+                        finally:
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+                    else:
+                        from gtts import gTTS
+                        import io
+                        
+                        tts = gTTS(text=text, lang=language_code)
+                        fp = io.BytesIO()
+                        tts.write_to_fp(fp)
+                        fp.seek(0)
+                        binary_data = fp.read()
+                        is_binary = True
+                        response_content_type = "audio/mpeg"
+                        status_code = 200
+                else:
+                    response_data = {"error": "Missing text"}
+                    status_code = 400
+
+            elif path == "/api/stt":
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                audio_b64 = data.get("audio")
+                language_code = data.get("language_code", "en-US")
+                
+                if len(language_code) == 2:
+                    lang_map = {"en": "en-US", "hi": "hi-IN", "ta": "ta-IN", "te": "te-IN", "ml": "ml-IN"}
+                    language_code = lang_map.get(language_code, "en-US")
+                
+                if audio_b64:
+                    import base64
+                    import tempfile
+                    import os
+                    import speech_recognition as sr
+                    
+                    audio_bytes = base64.b64decode(audio_b64)
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
+                    os.close(temp_fd)
+                    try:
+                        with open(temp_path, "wb") as f:
+                            f.write(audio_bytes)
+                            
+                        r = sr.Recognizer()
+                        with sr.AudioFile(temp_path) as source:
+                            audio_data = r.record(source)
+                            try:
+                                text = r.recognize_google(audio_data, language=language_code)
+                                response_data = {"text": text}
+                                status_code = 200
+                            except Exception as e:
+                                response_data = {"text": "", "error": f"Speech recognition failed: {e}"}
+                                status_code = 200
+                    finally:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                else:
+                    response_data = {"error": "Missing audio data"}
+                    status_code = 400
+
+            elif path == "/api/sessions/pdf":
+                if post_data:
+                    data = json.loads(post_data.decode('utf-8'))
+                session_id = data.get("session_id", "session")
+                title = data.get("title", "Study Session Summary")
+                html_content = data.get("content", "")
+                
+                import os
+                pdf_dir = "/Users/vincyvincent/rhema_mcp/frontend/public/documents"
+                os.makedirs(pdf_dir, exist_ok=True)
+                
+                pdf_filename = f"{session_id}.pdf"
+                pdf_path = os.path.join(pdf_dir, pdf_filename)
+                
+                compile_html_to_pdf(html_content, title, pdf_path)
+                
+                import uuid
+                doc_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO session_documents (document_id, session_id, file_path)
+                    VALUES (?, ?, ?)
+                """, (doc_id, session_id, pdf_path))
+                conn.commit()
+                
+                response_data = {
+                    "status": "success",
+                    "pdf_url": f"/documents/{pdf_filename}",
+                    "document_id": doc_id
+                }
+                status_code = 200
+
+        except Exception as e:
+            response_data = {"error": str(e)}
+            status_code = 500
+        finally:
+            conn.close()
+
+        self.send_response(status_code)
+        self.send_header('Content-Type', response_content_type)
+        self.send_cors_headers()
+        self.end_headers()
+        if is_binary:
+            self.wfile.write(binary_data)
+        else:
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
 
     def do_GET(self):
         parsed_url = urlparse(self.path)
@@ -779,6 +1141,41 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     response_data = {"places": rows}
                     status_code = 200
 
+            elif path == "/api/geography/routes":
+                cursor.execute("SELECT route_id, title, description FROM geography_routes ORDER BY route_id")
+                rows = [dict(r) for r in cursor.fetchall()]
+                response_data = {"routes": rows}
+                status_code = 200
+
+            elif path == "/api/geography/routes/points":
+                route_id = query_params.get("route_id", [None])[0]
+                if route_id:
+                    cursor.execute("""
+                        SELECT sequence_order, latitude, longitude, place_name, associated_verse_id
+                        FROM route_points
+                        WHERE route_id = ?
+                        ORDER BY sequence_order
+                    """, (route_id.lower(),))
+                    rows = [dict(r) for r in cursor.fetchall()]
+
+                    # Fetch verse details for each point
+                    for r in rows:
+                        if r["associated_verse_id"]:
+                            cursor.execute("SELECT text_en, text_original FROM verses WHERE id = ?", (r["associated_verse_id"].upper(),))
+                            v_row = cursor.fetchone()
+                            if v_row:
+                                r["text_en"] = v_row[0]
+                                r["text_original"] = v_row[1]
+                            else:
+                                r["text_en"] = ""
+                                r["text_original"] = ""
+                        else:
+                            r["text_en"] = ""
+                            r["text_original"] = ""
+
+                    response_data = {"points": rows}
+                    status_code = 200
+
             elif path == "/api/stats":
                 cursor.execute("SELECT count(*) FROM verses")
                 verses_count = cursor.fetchone()[0]
@@ -815,6 +1212,29 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     event_dict['verses'] = [row[0] for row in cursor.fetchall()]
                     events_list.append(event_dict)
                 response_data = {"events": events_list}
+                status_code = 200
+
+            elif path == "/api/sessions":
+                cursor.execute("SELECT session_id, title, content, updated_at FROM sessions ORDER BY updated_at DESC")
+                rows = [dict(r) for r in cursor.fetchall()]
+                response_data = {"sessions": rows}
+                status_code = 200
+
+            elif path == "/api/sessions/search":
+                q = query_params.get("q", [None])[0]
+                if q:
+                    match_query = f"{q}*"
+                    cursor.execute("""
+                        SELECT s.session_id, s.title, s.content, s.updated_at
+                        FROM sessions s
+                        JOIN sessions_fts f ON s.session_id = f.session_id
+                        WHERE sessions_fts MATCH ?
+                        ORDER BY s.updated_at DESC
+                    """, (match_query,))
+                else:
+                    cursor.execute("SELECT session_id, title, content, updated_at FROM sessions ORDER BY updated_at DESC")
+                rows = [dict(r) for r in cursor.fetchall()]
+                response_data = {"sessions": rows}
                 status_code = 200
 
         except Exception as e:

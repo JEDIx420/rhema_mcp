@@ -75,3 +75,67 @@ export async function fetchStats() {
   if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
 }
+
+export async function fetchGeographyRoutes() {
+  const res = await fetch(`${API_BASE}/api/geography/routes`);
+  if (!res.ok) throw new Error("Failed to fetch geography routes");
+  return res.json();
+}
+
+export async function fetchRoutePoints(routeId: string) {
+  const res = await fetch(`${API_BASE}/api/geography/routes/points?route_id=${routeId}`);
+  if (!res.ok) throw new Error("Failed to fetch route points");
+  return res.json();
+}
+
+export async function fetchSessions() {
+  const res = await fetch(`${API_BASE}/api/sessions`);
+  if (!res.ok) throw new Error("Failed to fetch sessions");
+  return res.json();
+}
+
+export async function createSession(title: string, content: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, content })
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
+export async function updateSession(sessionId: string, title: string, content: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, title, content })
+  });
+  if (!res.ok) throw new Error("Failed to update session");
+  return res.json();
+}
+
+export async function deleteSession(sessionId: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId })
+  });
+  if (!res.ok) throw new Error("Failed to delete session");
+  return res.json();
+}
+
+export async function searchSessions(query: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error("Failed to search sessions");
+  return res.json();
+}
+
+export async function generateSessionPDF(sessionId: string, title: string, content: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, title, content })
+  });
+  if (!res.ok) throw new Error("Failed to compile session PDF");
+  return res.json();
+}

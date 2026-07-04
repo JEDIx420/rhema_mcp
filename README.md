@@ -19,19 +19,18 @@ Run the following in your terminal:
 
 ---
 
-## 🎨 Next.js 15 Web Application
+## 🎨 Next.js Web Application
 
-Rhema includes a highly polished, responsive frontend built with **Next.js 15** and **Tailwind CSS v4**, utilizing the premium "Zenrev" design system aesthetic.
+Rhema includes a highly polished, responsive frontend built with **Next.js** and **Tailwind CSS**, utilizing the premium "Zenrev" design system aesthetic.
 
 ### Features
-* **Reading Desk**: An advanced scripture reader supporting side-by-side English and original (Hebrew/Greek) interlinear translation. Click any original word to instantly view Strong's definitions and exhaustive occurrences.
-* **Study Pane (Exegesis Drawer)**: A unified, multi-tab exegesis engine providing instant access to:
-  * **Lexicon**: Strong's Concordance definitions and cross-chapter verse occurrences.
-  * **Commentary**: Treasury of Scriptural Knowledge and classic commentaries.
-  * **Geography**: Interactive Leaflet maps detailing geocoded locations mentioned in the verse.
-  * **Timeline**: Historical timeline milestones.
-  * **Cross-References**: Deep-linked scriptural cross-references.
-* **Split-Pane Search Center**: Lightning-fast FTS5 full-text search across all Testaments with an embedded right-side Study Pane for immediate verse analysis without losing search context.
+* **Reading Desk**: An advanced scripture reader supporting side-by-side English and original (Hebrew/Greek) interlinear translation. Click any original word to instantly view Strong's definitions and exhaustive occurrences. Includes TTS voice synthesis for translated verses.
+* **Sessions Note Workspace**: A built-in TipTap editor for exegesis logging. Features auto-saving, drag-and-drop scripture quoting, speech dictation (STT), and one-click PDF generation.
+* **Map & Biblical Routes View**: Displays interactive Leaflet maps with two modes:
+  * *Chapter Atlas*: Mapped coordinates for references mentioned in the active reading context.
+  * *Biblical Routes*: Visualizes sequential historical routes (e.g. Abraham's Journey, the Exodus Journey) with connecting dashed dashed polyline paths.
+* **Study Pane (Exegesis Drawer)**: A unified, multi-tab exegesis engine providing instant access to Lexicon, Commentary, Geography, Chronology Timelines, and Cross-References.
+* **Split-Pane Search Center**: Lightning-fast FTS5 full-text search across all Testaments with dynamic book/testament filters and an embedded study pane.
 
 ### Running the Frontend
 ```bash
@@ -77,3 +76,6 @@ Add the server configuration to your Claude Desktop config file:
 *   `search_topics(query)`: Searches subjects and entries in Nave's Topical Index.
 *   `get_biography(person_id)`: Details biographical summaries and social relationships (parentage, marriages, tribal lineage).
 *   `get_chapter_map_data(book, chapter)`: Exposes geocoded coordinates for places mentioned in the chapter.
+*   `list_geography_routes()`: Lists biblical historical journey routes.
+*   `get_route_points(route_id)`: Lists sequential coordinates and places for a journey path.
+

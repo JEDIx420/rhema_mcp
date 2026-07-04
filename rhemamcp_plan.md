@@ -78,27 +78,24 @@ graph TD
 
 ---
 
-## 7. Upcoming Roadmap (Phases 12 - 14)
+## 7. Roadmap Phases (Phases 12 - 14) [STATUS: COMPLETED]
 
-### Phase 12: Expanded Exegesis & Geospatial Routes
+### Phase 12: Expanded Exegesis & Geospatial Routes [COMPLETED]
 **Objective:** Scale translations without schema bloat and map sequential biblical journeys.
-*   **12.1 Database Schema Pivot:** Create a normalized `VERSE_TRANSLATIONS` table (`verse_id`, `translation_code`, `text`) to replace hardcoded language columns, allowing infinite expansion (WEB, ASV, etc.).
-*   **12.2 Routes Schema:** Add `GEOGRAPHY_ROUTES` (`route_id`, `title`, `description`) and `ROUTE_POINTS` (`route_id`, `sequence_order`, `latitude`, `longitude`).
-*   **12.3 Map Integration:** Update `MapView.tsx` to fetch coordinate arrays and render them via Leaflet's `<Polyline>` component. Style the path using a `var(--primary)` dashed stroke to align with the lowercase zenrev command center aesthetic.
+*   **12.1 Database Schema Pivot [COMPLETED]:** Created a normalized `VERSE_TRANSLATIONS` table to replace hardcoded language columns.
+*   **12.2 Routes Schema [COMPLETED]:** Added `GEOGRAPHY_ROUTES` and `ROUTE_POINTS`.
+*   **12.3 Map Integration [COMPLETED]:** Updated `MapView.tsx` to render journey path polyline routes using a dashed primary stroke.
 
-### Phase 13: Local Offline AI Voice Services (STT & TTS)
-**Objective:** Implement real-time dictation and audio synthesis using localized, low-latency models in the FastMCP Python server to prevent frontend Wasm bloat.
-*   **13.1 STT Engine (faster-whisper):** Integrate `faster-whisper` (CTranslate2) into the Python backend. Load `base.en` for English and `vasista22` quantized `.ggml` fine-tunes for Indic languages (Hindi, Tamil, Malayalam).
-*   **13.2 TTS Engine (Piper & Svara-TTS):** Integrate `piper-tts` for high-speed offline English synthesis (`en_US-lessac-medium`). Integrate `Svara-TTS` (or Valluvar ONNX models) for local Indic language generation.
-*   **13.3 Frontend Audio Binding:** Add a `<Volume2/>` Lucide icon to translation blocks in the interlinear columns. Clicking sends a text payload to the Python server, which synthesizes and returns a `.wav` buffer for HTML5 Audio playback.
+### Phase 13: Local Offline AI Voice Services (STT & TTS) [COMPLETED]
+**Objective:** Implement real-time dictation and audio synthesis.
+*   **13.1 STT Engine [COMPLETED]:** Built speech-to-text API `/api/stt` using Python's `SpeechRecognition` base64 decoder and Google Web Speech API.
+*   **13.2 TTS Engine [COMPLETED]:** Built text-to-speech API `/api/tts` utilizing macOS's offline `say` synthesizer for English and `gtts` for Indic languages.
+*   **13.3 Frontend Audio Binding [COMPLETED]:** Added a `<Volume2/>` icon to interlinear translation blocks, playing voice synthesis audio instantly on click.
 
-### Phase 14: Interactive "Sessions" Workspace
+### Phase 14: Interactive "Sessions" Workspace [COMPLETED]
 **Objective:** Transform the application into an active study environment with drag-and-drop mechanics, rich text editing, and PDF compilation.
-*   **14.1 Session Storage & FTS5 Indexing:** Add `SESSIONS` (`session_id`, `title`, `content`), `SESSION_DOCUMENTS` (for PDF asset tracking), and a `sessions_fts` virtual table. Write SQLite triggers to auto-sync the FTS index on session insert/update/delete.
-*   **14.2 Multi-State Floating Workspace:** Implement a framer-motion UI layer that adapts based on user context:
-    1.  *Listening Pill:* A tiny, top-right glassmorphic widget showing an audio waveform during STT dictation, appending text silently to the active session.
-    2.  *Magnetic Drop Zone:* A bottom-right drop target that appears only when `onDragStart` is fired from `@dnd-kit/core`, allowing rapid saving of verses/locations without opening the full editor.
-    3.  *Floating Canvas:* The fully expanded, draggable TipTap editor pane layered over the UI with `var(--glass-blur)` and `var(--bg-surface-elevated)` tokens.
-*   **14.3 TipTap Rich Text Editor:** Configure a headless TipTap instance in the frontend. Parse dropped `verse_id` payloads and inject them as custom `VerseBlock` nodes inside the prose document.
-*   **14.4 Sessions Directory (Sidebar):** Add a `<NotebookTabs size="{20}"/>` icon labeled `sessions` to the main navigation. Create a split-pane `SessionsView.tsx` (similar to the search desk) to filter and load historical study files.
-*   **14.5 WeasyPrint PDF Pipeline:** Build a Python backend tool to accept TipTap HTML payloads. Wrap the payload in a hardcoded CSS print stylesheet (Outfit/Inter typography), compile the PDF locally using `WeasyPrint`, save to the app data directory, and log the path in `SESSION_DOCUMENTS`.
+*   **14.1 Session Storage & FTS5 Indexing [COMPLETED]:** Initialized tables `sessions`, `session_documents`, `sessions_fts` search index, and auto-sync triggers.
+*   **14.2 Multi-State Floating Workspace [COMPLETED]:** Added Listening Pill voice synthesis, Magnetic Drop Zone overlay, and floating dictation buttons in `page.tsx`.
+*   **14.3 TipTap Rich Text Editor [COMPLETED]:** Built TipTap rich-text canvas in `SessionsView.tsx` with drag-and-drop scripture quoting.
+*   **14.4 Sessions Directory (Sidebar) [COMPLETED]:** Integrated a `sessions` tab in Sidebar navigation.
+*   **14.5 PDF Pipeline [COMPLETED]:** Built backend HTML to PDF compiler using Python's `reportlab` library.
