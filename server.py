@@ -685,7 +685,48 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                                                 "verse_id": verse_id
                                             })
                             
-                            rows.sort(key=lambda x: x["verse_id"])
+                    # Numerical verse-aware sorting
+                    def parse_verse_key(verse_id):
+                        parts = verse_id.split(".")
+                        if len(parts) == 3:
+                            try:
+                                return (parts[0], int(parts[1]), int(parts[2]))
+                            except ValueError:
+                                pass
+                        return (verse_id, 0, 0)
+                        
+                    rows.sort(key=lambda x: parse_verse_key(x["verse_id"]))
+
+                    # Decorate place items with text content, original terms, and etymology details
+                    for row in rows:
+                        cursor.execute("SELECT text_en, text_original FROM verses WHERE id = ?", (row["verse_id"],))
+                        v_row = cursor.fetchone()
+                        if v_row:
+                            row["text_en"] = v_row[0]
+                            row["text_original"] = v_row[1]
+                        else:
+                            row["text_en"] = ""
+                            row["text_original"] = ""
+
+                        # Fetch Name Meaning (Hitchcock)
+                        cursor.execute("SELECT meaning FROM bible_names_dictionary WHERE name = ?", (row["name"],))
+                        m_row = cursor.fetchone()
+                        row["meaning"] = m_row[0] if m_row else None
+
+                        # Fetch Matthew Henry Commentary
+                        cursor.execute("SELECT text FROM commentaries WHERE verse_id = ? LIMIT 1", (row["verse_id"],))
+                        c_row = cursor.fetchone()
+                        row["commentary"] = c_row[0] if c_row else None
+
+                        # Fetch Dictionary Definition
+                        cursor.execute("""
+                            SELECT d.definition_text
+                            FROM dictionary_definitions d
+                            JOIN dictionary_entries e ON d.entry_slug = e.slug
+                            WHERE LOWER(e.name) = LOWER(?) LIMIT 1
+                        """, (row["name"],))
+                        d_row = cursor.fetchone()
+                        row["dict_definition"] = d_row[0] if d_row else None
                     
                     response_data = {"places": rows}
                     status_code = 200

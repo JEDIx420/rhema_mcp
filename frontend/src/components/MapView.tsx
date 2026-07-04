@@ -12,6 +12,11 @@ interface MapPlace {
   longitude: number;
   type: string;
   verse_id: string;
+  text_en?: string;
+  text_original?: string;
+  meaning?: string | null;
+  commentary?: string | null;
+  dict_definition?: string | null;
 }
 
 interface MapViewProps {
@@ -116,15 +121,42 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
       const group: any[] = [];
 
       places.forEach((place) => {
+        const popupContent = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.5; color: #1e293b; max-width: 280px; padding: 4px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px; gap: 8px;">
+              <strong style="font-size: 15px; color: #2563eb;">${place.name}</strong>
+              <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; background-color: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 9999px;">${place.type}</span>
+            </div>
+            ${place.meaning ? `<div style="font-style: italic; color: #7c3aed; font-size: 11px; margin-bottom: 6px; font-family: Georgia, serif;">"Meaning: ${place.meaning}"</div>` : ""}
+            <div style="margin-bottom: 8px;">
+              <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Scripture Reference (${place.verse_id})</span>
+              <div style="font-family: Georgia, serif; font-size: 13px; color: #334155; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; font-style: italic;">
+                &ldquo;${place.text_en || "Verse text not loaded"}&rdquo;
+              </div>
+              ${place.text_original ? `<div style="font-family: Georgia, serif; font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">${place.text_original}</div>` : ""}
+            </div>
+            ${place.dict_definition ? `
+              <div style="margin-bottom: 8px;">
+                <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Easton/Smith Bible Dictionary</span>
+                <div style="font-size: 11px; color: #475569; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;" title="${place.dict_definition.replace(/"/g, '&quot;')}">
+                  ${place.dict_definition}
+                </div>
+              </div>
+            ` : ""}
+            ${place.commentary ? `
+              <div>
+                <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Commentary Snippet</span>
+                <div style="font-size: 11px; color: #475569; background-color: rgba(37,99,235,0.02); padding: 8px; border-radius: 8px; border: 1px solid rgba(37,99,235,0.05); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+                  ${place.commentary}
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        `;
+
         const marker = L.marker([place.latitude, place.longitude])
           .addTo(leafletInstance)
-          .bindPopup(
-            `<div class="text-xs p-1" style="color: var(--text-primary)">
-              <strong style="font-size: 13px; color: var(--primary);">${place.name}</strong><br/>
-              <span style="color: var(--text-muted); font-size: 10px; text-transform: uppercase;">${place.type}</span><br/>
-              <div style="margin-top: 5px;">Ref: <strong>${place.verse_id}</strong></div>
-            </div>`
-          );
+          .bindPopup(popupContent);
         
         // Save marker reference
         markersRef.current.push(marker);
