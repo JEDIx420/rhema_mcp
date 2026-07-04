@@ -85,13 +85,13 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
       <div
         className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm"
       >
-        <div className="flex items-center gap-2">
-          <Clock size={18} style={{ color: "var(--primary)" }} />
-          <h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>
+        <div className="flex items-center gap-2.5">
+          <Clock size={20} className="text-blue-600" />
+          <h2 className="text-xl font-bold text-slate-900 font-sans">
             Chronological Timeline
           </h2>
         </div>
-        <div className="text-xs px-2.5 py-1 rounded bg-blue-50 text-blue-600 font-semibold border border-blue-200/50">
+        <div className="text-base px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-600 font-semibold border border-blue-200/50 font-sans">
           History Range: 2000 BC &mdash; AD 100
         </div>
       </div>
@@ -109,8 +109,8 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
         <div className="flex-1 flex flex-col overflow-hidden p-6 gap-6">
           
           {/* Interactive Horizontal Timeline Track */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm shrink-0">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm shrink-0">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-4 font-sans">
               Interactive Horizontal Timeline Map
             </span>
             
@@ -172,38 +172,38 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
           <div className="flex-1 flex gap-6 overflow-hidden min-h-0">
             {/* Left Column: Event details card */}
             {closestEvent && (
-              <div className="flex-[3] flex flex-col bg-white border border-slate-200 rounded-xl p-5 shadow-sm overflow-y-auto">
+              <div className="flex-[3] flex flex-col bg-white border border-slate-200 rounded-xl p-6 shadow-sm overflow-y-auto">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
                   <div className="flex items-center gap-2">
-                    <Calendar className="text-blue-500" size={16} />
-                    <span className="text-sm font-extrabold text-blue-600 uppercase tracking-wider">
+                    <Calendar className="text-blue-500" size={18} />
+                    <span className="text-base font-extrabold text-blue-600 uppercase tracking-wider font-sans">
                       {formatYear(closestEvent.year)}
                     </span>
-                    <span className="text-slate-355">&bull;</span>
-                    <span className="text-xs text-slate-500 font-semibold">{closestEvent.location}</span>
+                    <span className="text-slate-300">&bull;</span>
+                    <span className="text-base text-slate-600 font-semibold font-sans">{closestEvent.location}</span>
                   </div>
                   {closestEvent.verses && closestEvent.verses.length > 0 && (
                     <button
                       onClick={() => handleGoToReference(closestEvent.verses[0])}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 text-base font-bold cursor-pointer transition-colors shadow-xs font-sans"
                     >
-                      <Navigation size={12} />
+                      <Navigation size={14} />
                       Jump to Scripture ({closestEvent.verses[0]})
                     </button>
                   )}
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-xl font-extrabold text-slate-850" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>
+                  <h3 className="text-2xl font-bold text-slate-900 font-sans">
                     {closestEvent.title}
                   </h3>
-                  <p className="text-sm leading-relaxed text-slate-600 bg-slate-50 p-5 rounded-2xl border border-slate-200/50">
+                  <p className="text-[17px] leading-relaxed text-slate-700 bg-slate-50 p-6 rounded-2xl border border-slate-200/50 font-prose">
                     {closestEvent.description}
                   </p>
 
                   {closestEvent.verses && closestEvent.verses.length > 0 && (
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      <span className="text-xs font-bold text-slate-450 uppercase tracking-wider block font-sans">
                         Associated Scriptures
                       </span>
                       <div className="flex flex-wrap gap-2">
@@ -211,9 +211,9 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                           <button
                             key={v}
                             onClick={() => handleGoToReference(v)}
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 text-base font-semibold cursor-pointer transition-all flex items-center gap-2 font-sans"
                           >
-                            <BookOpen size={12} className="text-slate-450" />
+                            <BookOpen size={14} className="text-slate-400" />
                             {v}
                           </button>
                         ))}
@@ -225,8 +225,8 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
             )}
 
             {/* Right Column: Historical List */}
-            <div className="flex-[2] flex flex-col bg-white border border-slate-200 rounded-xl p-5 shadow-sm overflow-hidden">
-              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 block shrink-0">
+            <div className="flex-[2] flex flex-col bg-white border border-slate-200 rounded-xl p-6 shadow-sm overflow-hidden">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4 block shrink-0 font-sans">
                 All Chronological Events
               </h4>
               <div className="flex-1 overflow-y-auto space-y-2 pr-1">
@@ -236,22 +236,22 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                     <button
                       key={item.event_id}
                       onClick={() => setScrubYear(item.year)}
-                      className="w-full text-left p-3 rounded-2xl border transition-all flex items-start gap-3 cursor-pointer hover:bg-slate-50/50"
+                      className="w-full text-left p-4.5 rounded-2xl border transition-all flex items-start gap-4 cursor-pointer hover:bg-slate-50/50"
                       style={{
                         background: isClosest ? "rgba(37, 99, 235, 0.04)" : "transparent",
                         borderColor: isClosest ? "rgba(37, 99, 235, 0.2)" : "rgba(15, 23, 42, 0.05)",
                       }}
                     >
-                      <div className="px-2 py-1 rounded-lg font-bold text-[10px] uppercase shrink-0 text-center w-20 font-mono"
+                      <div className="px-3 py-1.5 rounded-lg font-bold text-xs uppercase shrink-0 text-center w-24 font-mono shadow-xs"
                            style={{ background: isClosest ? "rgba(37, 99, 235, 0.1)" : "rgba(15, 23, 42, 0.03)",
                                     color: isClosest ? "var(--primary)" : "var(--text-muted)" }}>
                         {formatYear(item.year)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-800 text-xs truncate">
+                        <div className="font-bold text-slate-900 text-base truncate font-sans">
                           {item.title}
                         </div>
-                        <div className="text-slate-450 text-[9px] mt-0.5 truncate">
+                        <div className="text-slate-500 text-xs mt-1 truncate font-sans">
                           {item.location}
                         </div>
                       </div>

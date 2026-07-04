@@ -977,13 +977,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "100%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="w-96 border border-slate-200 overflow-hidden flex flex-col shrink-0 bg-white shadow-md my-4 mr-4 rounded-2xl"
+              className="w-[450px] border border-slate-200 overflow-hidden flex flex-col shrink-0 bg-white shadow-md my-4 mr-4 rounded-2xl"
             >
               {/* Drawer Tab Headers */}
-              <div className="flex border-b border-slate-200 text-xs font-semibold bg-slate-50">
+              <div className="flex border-b border-slate-200 text-base font-semibold bg-slate-50">
                 <button
                   onClick={() => setActiveTab("verse")}
-                  className={`flex-1 py-3.5 text-center transition-all cursor-pointer border-b-2 font-sans ${
+                  className={`flex-1 py-4 text-center transition-all cursor-pointer border-b-2 font-sans ${
                     activeTab === "verse" 
                       ? "text-blue-600 border-blue-600 font-bold" 
                       : "text-slate-500 border-transparent hover:text-slate-800"
@@ -995,7 +995,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 {activeLexiconWord && (
                   <button
                     onClick={() => setActiveTab("lexicon")}
-                    className={`flex-1 py-3.5 text-center transition-all cursor-pointer border-b-2 font-sans ${
+                    className={`flex-1 py-4 text-center transition-all cursor-pointer border-b-2 font-sans ${
                       activeTab === "lexicon" 
                         ? "text-purple-600 border-purple-600 font-bold" 
                         : "text-slate-500 border-transparent hover:text-slate-800"
@@ -1007,42 +1007,37 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 )}
                 <button
                   onClick={() => setSelectedVerse(null)}
-                  className="px-4 hover:text-red-500 transition-colors border-l border-slate-200 cursor-pointer"
+                  className="px-5 hover:text-red-500 transition-colors border-l border-slate-200 cursor-pointer"
                 >
-                  <X size={15} />
+                  <X size={18} />
                 </button>
               </div>
 
               {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-5">
+              <div className="flex-1 overflow-y-auto p-6">
                 {activeTab === "verse" && (
                   <>
-                    <h3 className="text-base font-bold mb-4" style={{ color: "var(--primary)" }}>
+                    <h3 className="text-lg font-bold mb-4 font-sans text-slate-900">
                       {selectedVerse.verse.id} Study Pane
                     </h3>
 
                     {/* Commentary */}
                     {selectedVerse.commentaries.length > 0 ? (
                       <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2.5 text-slate-500 font-sans">
                           Matthew Henry Commentary
                         </h4>
                         {selectedVerse.commentaries.map((c, i) => (
                           <div
                             key={i}
-                            className="text-xs leading-relaxed p-3.5 rounded-xl mb-2.5 border"
-                            style={{
-                              background: "var(--bg-surface-elevated)",
-                              borderColor: "var(--border-subtle)",
-                              color: "var(--text-primary)",
-                            }}
+                            className="text-[17px] leading-relaxed p-5 rounded-2xl mb-3 border border-slate-200 bg-slate-50 text-slate-700 font-prose whitespace-pre-line"
                           >
                             {c.text}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs italic p-4 text-center text-slate-500">
+                      <div className="text-sm italic p-5 text-center text-slate-500 font-sans">
                         No commentaries available for this verse.
                       </div>
                     )}
@@ -1050,28 +1045,27 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     {/* Cross References */}
                     {selectedVerse.cross_references.length > 0 && (
                       <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "var(--secondary)" }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
                           Theological Cross References
                         </h4>
-                        <div className="space-y-2">
+                        <div className="flex flex-col gap-4">
                           {selectedVerse.cross_references.map((cr) => (
                             <div
                               key={cr.to_verse}
-                              className="p-3 rounded-xl border flex flex-col gap-1.5 text-xs"
-                              style={{ background: "var(--bg-surface-elevated)", borderColor: "var(--border-subtle)" }}
+                              className="p-5 rounded-2xl border border-slate-200 bg-white shadow-xs flex flex-col gap-2.5"
                             >
                               <div className="flex items-center justify-between w-full">
                                 <button
                                   onClick={() => handleVerseClick(cr.to_verse)}
-                                  className="font-bold text-blue-600 hover:underline cursor-pointer text-left"
+                                  className="font-bold text-blue-600 hover:underline cursor-pointer text-left text-base font-sans"
                                 >
                                   {cr.to_verse}
                                 </button>
-                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">
+                                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                                   {cr.votes} votes
                                 </span>
                               </div>
-                              <p className="text-[11px] leading-relaxed text-slate-600 italic">
+                              <p className="text-[17px] leading-relaxed text-slate-700 italic font-prose">
                                 &ldquo;{cr.text_en || "Verse text not available"}&rdquo;
                               </p>
                             </div>
@@ -1083,22 +1077,21 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     {/* Places */}
                     {selectedVerse.places.length > 0 && (
                       <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "var(--accent)" }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
                           Geocoded Locations
                         </h4>
-                        <div className="space-y-2">
+                        <div className="flex flex-col gap-3">
                           {selectedVerse.places.map((p, i) => (
                             <div
                               key={i}
-                              className="flex items-center gap-2 p-2.5 rounded-lg text-xs border"
-                              style={{ background: "var(--bg-surface-elevated)", borderColor: "var(--border-subtle)" }}
+                              className="flex items-center gap-3 p-4 rounded-xl text-base border border-slate-200 bg-white shadow-xs"
                             >
-                              <MapPin size={12} className="text-purple-400" />
-                              <div>
-                                <span className="font-semibold text-slate-200">{p.name}</span>
-                                <span className="text-[10px] block text-slate-500">{p.type}</span>
+                              <MapPin size={16} className="text-purple-500 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold text-slate-900 font-sans block truncate">{p.name}</span>
+                                <span className="text-xs block text-slate-500 font-sans truncate">{p.type}</span>
                               </div>
-                              <span className="ml-auto font-mono text-[10px] text-slate-400">
+                              <span className="ml-auto font-mono text-xs text-slate-400 shrink-0">
                                 {p.latitude.toFixed(2)}, {p.longitude.toFixed(2)}
                               </span>
                             </div>
@@ -1110,21 +1103,20 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     {/* Timeline Events */}
                     {selectedVerse.events.length > 0 && (
                       <div className="mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "var(--primary)" }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
                           Chronological Events
                         </h4>
                         {selectedVerse.events.map((e, i) => (
                           <div
                             key={i}
-                            className="p-3.5 rounded-xl mb-2.5 border bg-white shadow-sm"
-                            style={{ borderColor: "var(--border-subtle)" }}
+                            className="p-5 rounded-2xl mb-3 border border-slate-200 bg-white shadow-xs"
                           >
-                            <div className="text-xs font-bold text-slate-800">{e.title}</div>
-                            <div className="text-[10px] text-blue-600 font-semibold mt-0.5">
+                            <div className="text-base font-bold text-slate-900 font-sans">{e.title}</div>
+                            <div className="text-xs text-blue-600 font-bold mt-1 font-sans">
                               Year {e.year < 0 ? `${Math.abs(e.year)} BC` : `AD ${e.year}`} • {e.location}
                             </div>
                             {e.description && (
-                              <p className="text-[10px] leading-relaxed text-slate-500 mt-1">{e.description}</p>
+                              <p className="text-[17px] leading-relaxed text-slate-700 mt-2 bg-slate-50 p-4 rounded-xl border border-slate-200 font-prose">{e.description}</p>
                             )}
                           </div>
                         ))}
