@@ -647,6 +647,46 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         ORDER BY vg.verse_id
                     """, (book.upper(), int(chapter)))
                     rows = [dict(r) for r in cursor.fetchall()]
+                    
+                    if not rows:
+                        import re
+                        cursor.execute("SELECT id, text_en FROM verses WHERE book = ? AND chapter = ?", (book.upper(), int(chapter)))
+                        chapter_verses = cursor.fetchall()
+                        if chapter_verses:
+                            cursor.execute("SELECT name, latitude, longitude, type FROM geography_places")
+                            all_places = cursor.fetchall()
+                            
+                            chapter_text = " ".join([v[1] for v in chapter_verses])
+                            chapter_words = set(re.findall(r"\b\w+\b", chapter_text.lower()))
+                            
+                            common_stops = {"no", "so", "on", "am", "all", "but", "up", "red", "of", "in", "at", "by", "to", "for", "with", "the", "a", "an", "and", "or", "if", "be", "is", "are", "was", "were"}
+                            
+                            for place_name, lat, lon, p_type in all_places:
+                                clean_name = re.sub(r"\s+\d+$", "", place_name)
+                                place_lower = clean_name.lower()
+                                first_word = re.findall(r"\b\w+\b", place_lower)
+                                if not first_word or first_word[0] not in chapter_words:
+                                    continue
+                                
+                                is_stop = place_lower in common_stops or len(clean_name) <= 3
+                                if is_stop:
+                                    regex = re.compile(r"\b" + re.escape(clean_name) + r"\b")
+                                else:
+                                    regex = re.compile(r"\b" + re.escape(clean_name) + r"\b", re.IGNORECASE)
+                                    
+                                for verse_id, text_en in chapter_verses:
+                                    if regex.search(text_en):
+                                        if not any(x["name"] == clean_name and x["verse_id"] == verse_id for x in rows):
+                                            rows.append({
+                                                "name": clean_name,
+                                                "latitude": lat,
+                                                "longitude": lon,
+                                                "type": p_type,
+                                                "verse_id": verse_id
+                                            })
+                            
+                            rows.sort(key=lambda x: x["verse_id"])
+                    
                     response_data = {"places": rows}
                     status_code = 200
 
