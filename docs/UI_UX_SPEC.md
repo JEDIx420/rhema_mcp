@@ -82,18 +82,16 @@ The application is structured into a persistent sidebar navigation and a primary
 ### A. The Interlinear Reading Desk (`ReadingDesk.tsx`)
 The primary interlinear alignment station, displaying scriptures in side-by-side translation columns:
 1.  **Top Header Bar**:
-    *   `Prev/Next Chapter Buttons`: Chevron left/right arrows (`p-1.5 rounded hover:bg-slate-100`) for step navigation.
+    *   `Prev/Next Chapter Buttons`: Chevron left/right arrows that dynamically transition between books using exact chapter counts and disable boundaries on Genesis 1 and Revelation 22.
     *   `Book Selector Button`: Displays `[BookName] [ChapterNumber]` (e.g. *Genesis 1*) as a clickable pill button with `BookOpen` and `ChevronDown` icons. Triggers the [BookChapterPickerModal](file:///Users/vincyvincent/rhema_mcp/frontend/src/components/BookChapterPickerModal.tsx).
     *   `Text Sizer Widget`: Offers `-` / `+` font scaling options. Default sizing initialized at `17px` for enhanced legibility.
     *   `Translation Pills`: Staggered flex buttons (`gap-2.5`) corresponding to English, Original (Hebrew/Greek), Hindi, Telugu, Malayalam, and Tamil translations. Active states show as solid blue text with a soft blue backdrop (`rgba(37, 99, 235, 0.08)`).
 2.  **Verses Pane**:
     *   `Multilingual Columns Grid`: Dynamically fits columns based on the enabled translations count.
     *   `Bidirectional Highlights (Vowel-Tolerant)`: Clicking or hovering over an English word automatically highlights the corresponding Hebrew/Greek word in the Original column. Employs a custom consonantal root extraction algorithm (`stripVowels()`) to bypass spelling differences and grammatical prefixes (`w`, `h`, `b`, `l`, `k`, `m`), yielding instant matching.
-    *   `Original Lexicon Click Modal`: Clicking an original Hebrew or Greek word opens a detailed popover modal containing:
-        *   Strongs ID, Lemma, and phonetic English pronunciation guide (e.g., *Pronunciation: tehom*).
-        *   Un-truncated dictionary definitions in a scrollable serif text card.
+    *   `Original Lexicon Click Modal`: Clicking an original Hebrew or Greek word opens a detailed popover modal containing Strongs ID, Lemma, and phonetic pronunciation guide (e.g., *Pronunciation: tehom*), plus un-truncated definitions in a scrollable card.
 3.  **Exegesis Drawer (Right Panel)**:
-    *   Slides out on verse select. Features tabs for `Verse Info` (detailed morphology, geocoded locations, and cross-reference links with vote counts) and `Commentary` (full Matthew Henry commentary paragraphs).
+    *   Slides out on verse select. Integrates the unified `<StudyPane />` component, exposing Lexicon, Commentary, Geography maps, timelines, and cross-references. Features full verse occurrences navigation which redirects the main Reading Desk chapter coordinates and syncs view coordinates automatically.
 
 ---
 
@@ -127,14 +125,19 @@ A visual historical dashboard charting events across scripture:
 Renders interactive biographical relationship nodes:
 *   **Left Sidebar Biography**: Features a prominent input box to search characters (e.g. *David*). Displays name meanings, gender (fixed mapping check resolving startsWith("m") to *Male* and startsWith("f") to *Female*), tribal lineages, attributes, and biography notes.
 *   **Right SVG Graph Canvas**: Renders family trees in a `viewBox="0 0 600 500"` layout.
-    *   **Spouses**: Staggered vertically on alternating offsets above/below the central node line to prevent collision with children.
-    *   **Children**: Arranged along a bottom row using a dynamic step-width calculation (`Math.min(110, 480 / (count - 1))`) that fits all children on-screen without canvas overflows.
+*   **Spouses**: Staggered vertically on alternating offsets to prevent collision with children.
+*   **Children**: Arranged along a bottom row using a dynamic step-width calculation (`Math.min(110, 480 / (count - 1))`) that fits all children on-screen without canvas overflows.
 
 ---
 
-### F. Search & Dictionary Views
-*   **Prominent Input Areas**: Both views center their search bars inside spacious containers (`p-8 bg-slate-50/40`).
-*   **Sizing & Styling**: Search inputs use `text-base py-4 pl-14 pr-28` sizing with a `Search` button positioned relative right, creating a prominent card interface with subtle dropshadows.
+### F. Search Scriptures View (`SearchView.tsx`)
+A dual-pane research center integrating fast queries and instant exegesis:
+*   **Split-Pane Grid**: Spans the full screen width using a `grid grid-cols-1 md:grid-cols-12` layout.
+*   **Left Column (Search & Results - col-span-5)**: 
+    *   **Header Box**: Centers the search input bar inside a prominent card container with dropshadows.
+    *   **Filter Row**: Provides sorting (Relevance / Chronological) and dynamic Book and Testament dropdown filters. These dropdown options query the backend matches list and automatically constrain themselves to only list books and testaments containing results matching the query context.
+    *   **Results Panel**: Scrollable search list displaying paginated matching cards (50 per page). Clicking a card selects the verse. Clicking the navigation arrow jumps the user directly to that verse in the Reading Desk.
+*   **Right Column (Study Pane - col-span-7)**: Embeds the unified `<StudyPane />` component, loading the selected search result details immediately for context-rich study without losing search results.
 
 ---
 

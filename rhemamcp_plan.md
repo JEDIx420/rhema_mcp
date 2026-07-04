@@ -6,8 +6,9 @@ To build an ultra-fast, local, offline-first Bible study application ("rhema-mcp
 ## 2. Technical Stack
 *   **Database:** SQLite (`rhema.db`).
 *   **Performance:** FTS5 (Full-Text Search) virtualization for instantaneous keyword lookups.
-*   **Architecture:** Local-first, Tauri-based desktop app (frontend) interacting with an MCP (Model Context Protocol) server to query the local SQLite engine.
-*   **Design Aesthetic:** Command center interface with lowercase `zenrev` styling.
+*   **Architecture:** Local-first, Next.js 15 web app and FastMCP Python server interacting with the local SQLite engine.
+*   **Design Aesthetic:** Premium command center interface utilizing the lowercase `zenrev` styling rules.
+*   **Styling (Tailwind CSS v4):** Pure CSS configuration with `@theme` overrides in `globals.css` and custom VSCode settings to ignore proprietary at-rules validation.
 
 ## 3. Data Manifest & Provenance
 All data is sourced from open-source repositories, ensuring legal compliance and zero licensing costs.
@@ -19,24 +20,30 @@ All data is sourced from open-source repositories, ensuring legal compliance and
 | **Indic** | Hindi, Telugu, Malayalam, Tamil | `FreeBiblesIndia` (USFM) |
 | **Lexical** | Greek/Hebrew Dictionaries | SWORD Project (OSIS XML) / `openscriptures/HebrewLexicon` |
 | **Graphs** | Cross-References | OpenBible.info |
-| **Spatial** | Geocoding Data | `openbibleinfo/Bible-Geocoding-Data`[cite: 1] |
+| **Spatial** | Geocoding Data | `openbibleinfo/Bible-Geocoding-Data` |
 | **Commentary**| Historical Exegesis | `HistoricalChristianFaith/Commentaries-Database` (JSON) |
 | **Topical**   | People & Genealogy Graph | `BradyStephenson/bible-data` (Nave's / Hitchcock's) |
 | **Timeline**  | Biblical Chronology | `theonize/timeline` or `lifegems/bible-timeline` |
 
 ## 4. Current Implementation Status
-The project is currently in **Phase 11 (Premium UI/UX Overhaul & Polish)**.
+The project has successfully finished **Phase 11 (Premium UI/UX Overhaul & Polish)** and is fully optimized for daily bible study and exegesis research.
 *   **Phase 1 (Complete):** Established the core `verses` schema (`book`, `chapter`, `verse`, `text_en`, `text_original`, `morphology`) and successfully mapped KJV English to SBLGNT Greek.
 *   **Phase 2 (Complete):** Successfully ingested and aligned Hindi, Telugu, Malayalam, and Tamil translations.
 *   **Phase 3 (Complete):** Built the `search_en` FTS5 table for fast search and populated the `cross_references` graph network using the OpenBible relational matrix.
-*   **Phase 4 (Complete):** Geospatial mapping of ancient/modern locations via `Bible-Geocoding-Data`[cite: 1] processed into `geography_places` and `verse_geography` tables.
+*   **Phase 4 (Complete):** Geospatial mapping of ancient/modern locations via `Bible-Geocoding-Data` processed into `geography_places` and `verse_geography` tables.
 *   **Phase 5 (Complete):** Strong's Lexicon populated with 14,298 entries into the `lexicon_fts` full-text search table.
 *   **Phase 6 (Complete):** Ingested historical Matthew Henry commentaries mapped directly to New Testament verses.
 *   **Phase 7 (Complete):** Chronological timeline event mapping linking eras, locations, and verses.
 *   **Phase 8 (Complete):** Old Testament database expansion across all languages (English KJV, original Hebrew WLC, Hindi, Telugu, Malayalam, Tamil) and whole-bible cross-references update (256k+ connections).
 *   **Phase 9 (Complete):** Incorporated Easton's & Smith's Bible Dictionaries, Nave's Topical Index, Hitchcock's Name Meanings, and the complete biblical genealogical network (`BradyStephenson/bible-data`).
 *   **Phase 10 (Complete):** Initialized Next.js frontend application with TypeScript, Tailwind CSS, Framer Motion, and Lucide React. Setup container configuration and local package structure.
-*   **Phase 11 (Complete):** Conducted a deep premium UI/UX overhaul. Designed the chronological timeline with an interactive horizontal visual track and a 2-column details/historical list dashboard. Created a reusable, high-contrast `BookChapterPickerModal` (depth index `z-[9999]`) and integrated it across both reading and GIS maps pages. Built the Lexicon detail click modal for un-truncated definitions and Strong's indices. Integrated vowel-tolerant consonantal root word alignment. Fixed collapsed sidebar icon alignments. Refined genealogy tree spacing (alternating spouses, dynamic horizontal child spacing) and corrected gender indicator checks. Completed full TypeScript build compilation checks.
+*   **Phase 11 (Complete):**
+    *   **Unified StudyPane Component**: Replaced fragmented drawers in the Reading Desk and search interfaces with a shared, multi-tab exegesis container (`StudyPane.tsx`) detailing Strong's concordances, map locations, timelines, commentaries, and cross-references.
+    *   **Lexicon Verse Cycling**: Fully connected occurrences inside the Lexicon tab to let users click any occurrence, automatically navigate the main reading view to that book and chapter, and reload the exegesis details.
+    *   **Split-Pane Search Center**: Implemented a responsive 12-column layout in `SearchView.tsx`. Search queries are executed on the left while results are immediately analyzed inside the `StudyPane` on the right.
+    *   **Dynamic Dropdown Filtering**: The Book and Testament dropdown filters in the search center dynamically constrain their list options to only display books/testaments that contain matches for the active query.
+    *   **Boundary-Safe Chapter Navigation**: Prev/Next arrow navigation automatically transitions between books (e.g. moving from Numbers 1 to Leviticus 27 based on exact chapter counts) and dynamically disables at the boundaries (Genesis 1 and Revelation 22).
+    *   **Design System & Editor Linting**: Overhauled `app/layout.tsx` and `globals.css` to build an unbreakable Tailwind CSS v4 foundation (`font-sans` Outfit, `font-prose` Inter, and slate colors). Configured workspace `.vscode/settings.json` to suppress proprietary CSS validation warnings.
 
 ## 5. Development Guidelines
 1.  **Strict SQLite Idempotency:** Any scripts must check for existing tables/columns and clean them if necessary to prevent state-drift during development.
@@ -45,8 +52,6 @@ The project is currently in **Phase 11 (Premium UI/UX Overhaul & Polish)**.
 4.  **License Awareness:** All components must adhere to open-source licenses (CC BY-SA 4.0). Attribution is to be handled in the app settings, not inside the database rows.
 
 ## 6. Strategic Roadmap & Product Architecture
-
-To deliver Rhema as a highly premium, self-hostable, offline-first research station, we will structure the remaining steps into a detailed three-layer strategic roadmap.
 
 ```mermaid
 graph TD
@@ -57,33 +62,16 @@ graph TD
     NextJS --> Docker[Docker Compose Container]
 ```
 
-### Layer 1: Core System & Integration
-1.  **FastMCP Python Server**:
-    *   Build a Python Model Context Protocol (MCP) server wrapping the SQLite engine.
-    *   Expose structured tools for semantic search, original language lookup (Greek/Hebrew lemmas), geography mapping, and cross-reference queries.
-    *   Expose a conversational LLM research assistant (`zen`) that translates user queries into SQL and returns formatted study tables.
-2.  **Deployment & Distribution Pathways (Ordered from Easiest to Hardest)**:
-    *   **Path A: Standalone Desktop Installer (Tauri)** — *Easiest / One-Click*:
-        *   Compile the Next.js client and local Python server runtime into a single, offline-first installer (`.dmg` for macOS, `.exe` for Windows, `.deb` for Linux). No runtime setups or dependencies required by the user.
-    *   **Path B: Containerized Stack (Docker Compose)** — *Medium / One-Command*:
-        *   Create a `docker-compose.yml` file bundling the Next.js UI container, Python API container, and `rhema.db`. Easiest way to host a shared server instance locally or on a private server (Raspberry Pi, Synology NAS, VPS) with `docker compose up -d`.
-    *   **Path C: Local Source Installation (Git + NPM/Python)** — *Hardest / Developer*:
-        *   Clone the repository, initialize the database manually, install frontend dependencies (`npm install`), and run the Python backend with `uv run`. Perfect for development, custom database hacking, and direct system customization.
+### Layer 1: Core System & Integration (Implemented)
+1.  **FastMCP Python Server**: Exposes structured tools for semantic search, original language lookup (Greek/Hebrew lemmas), geography mapping, and cross-reference queries.
+2.  **Deployment & Distribution Pathways**:
+    *   **Path A: Standalone Desktop Installer (Tauri)**: Planned compile-target using Next.js static output and the local Rust/Tauri wrapper.
+    *   **Path B: Containerized Stack (Docker Compose)**: Complete stack containerization setup.
+    *   **Path C: Local Source Installation**: Ready-to-go environment via `setup.sh` and `npm run dev`.
 
-### Layer 2: Interactive Study UI/UX (zenrev aesthetics)
-1.  **Interlinear Reading Desk**:
-    *   Split-pane layout with custom Outfit/Inter typography, support for smooth dark mode, and HSL palettes.
-    *   Compare KJV, Greek/Hebrew WLC original text, and Indic translations side-by-side.
-    *   Hovering over any Greek or Hebrew word displays its morphological parsing and Strong's dictionary definition in a slide-out lexicon drawer.
-2.  **Visual Cross-Reference Canvas**:
-    *   Interactive network graph rendering connections from the 256,000+ cross-reference links.
-    *   Allows users to select a verse and visually trace its theological threads across books in a topological map.
-3.  **GIS Map & Timeline Panel**:
-    *   An interactive Mapbox/Leaflet panel displaying ancient locations from the `geography_places` table for the current chapter.
-    *   A chronological timeline slider linking the 42 major events. Moving the slider updates both the map panel and the scripture view to show corresponding places and events.
-
-### Layer 3: Additional Study Resources (Phases 9+)
-1.  **Easton's Bible Dictionary**:
-    *   Ingest the 4,000+ structured dictionary terms to provide contextual popups for names, places, and historical objects.
-2.  **Genealogy Tree Visualizer**:
-    *   Import family relationship structures from `BradyStephenson/bible-data` to render interactive lineage diagrams directly in the UI.
+### Layer 2: Interactive Study UI/UX (Implemented)
+1.  **Interlinear Reading Desk**: Side-by-side comparative views for KJV, original languages, and Indic translations with vowel-tolerant root word highlights and un-truncated popovers.
+2.  **Visual Cross-Reference Canvas**: Visualizes scripture connections inside the exegesis panel.
+3.  **GIS Map & Timeline Panel**: Merges Leaflet geographical markers and chronological event streams into the study pane.
+4.  **Easton's Bible Dictionary**: Integrated into the dictionary lookups.
+5.  **Genealogy Tree Visualizer**: Generates SVG pedigree trees dynamically in the biography view.
