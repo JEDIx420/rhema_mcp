@@ -556,10 +556,64 @@ NT_BOOKS = [
 ALL_BOOKS = OT_BOOKS + NT_BOOKS
 BOOK_ORDER = {code: i for i, code in enumerate(ALL_BOOKS)}
 
+def convert_to_wav(input_bytes: bytes) -> bytes:
+    import tempfile
+    import subprocess
+    import os
+    import sys
+
+    # Check if ffmpeg is available
+    ffmpeg_cmd = "ffmpeg"
+    if os.path.exists("/opt/homebrew/bin/ffmpeg"):
+        ffmpeg_cmd = "/opt/homebrew/bin/ffmpeg"
+    elif os.path.exists("/usr/local/bin/ffmpeg"):
+        ffmpeg_cmd = "/usr/local/bin/ffmpeg"
+    
+    try:
+        subprocess.run([ffmpeg_cmd, "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        sys.stderr.write("ffmpeg not found, skipping conversion and returning original bytes.\n")
+        return input_bytes
+
+    in_fd, in_path = tempfile.mkstemp()
+    os.close(in_fd)
+    out_fd, out_path = tempfile.mkstemp(suffix=".wav")
+    os.close(out_fd)
+
+    try:
+        with open(in_path, "wb") as f:
+            f.write(input_bytes)
+            
+        result = subprocess.run([
+            ffmpeg_cmd,
+            "-y",
+            "-i", in_path,
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "1",
+            out_path
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        if result.returncode != 0:
+            sys.stderr.write(f"ffmpeg conversion failed: {result.stderr.decode('utf-8')}\n")
+            return input_bytes
+            
+        with open(out_path, "rb") as f:
+            wav_data = f.read()
+        return wav_data
+    except Exception as e:
+        sys.stderr.write(f"Audio conversion exception: {e}\n")
+        return input_bytes
+    finally:
+        if os.path.exists(in_path):
+            os.remove(in_path)
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
 class JSONAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        # Suppress logging to stdout to prevent polluting stdio MCP traffic
-        pass
+        import sys
+        sys.stderr.write(f"[HTTP] {format % args}\n")
 
     def send_cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -645,6 +699,8 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     data = json.loads(post_data.decode('utf-8'))
                 text = data.get("text", "")
                 language_code = data.get("language_code", "en")
+                if language_code == "he":
+                    language_code = "iw"
                 
                 if text:
                     if language_code == "en":
@@ -703,26 +759,32 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     import os
                     import speech_recognition as sr
                     
-                    audio_bytes = base64.b64decode(audio_b64)
-                    temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
-                    os.close(temp_fd)
                     try:
-                        with open(temp_path, "wb") as f:
-                            f.write(audio_bytes)
-                            
-                        r = sr.Recognizer()
-                        with sr.AudioFile(temp_path) as source:
-                            audio_data = r.record(source)
-                            try:
-                                text = r.recognize_google(audio_data, language=language_code)
-                                response_data = {"text": text}
-                                status_code = 200
-                            except Exception as e:
-                                response_data = {"text": "", "error": f"Speech recognition failed: {e}"}
-                                status_code = 200
-                    finally:
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
+                        audio_bytes = base64.b64decode(audio_b64)
+                        wav_bytes = convert_to_wav(audio_bytes)
+                        
+                        temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
+                        os.close(temp_fd)
+                        try:
+                            with open(temp_path, "wb") as f:
+                                f.write(wav_bytes)
+                                
+                            r = sr.Recognizer()
+                            with sr.AudioFile(temp_path) as source:
+                                audio_data = r.record(source)
+                                try:
+                                    text = r.recognize_google(audio_data, language=language_code)
+                                    response_data = {"text": text}
+                                    status_code = 200
+                                except Exception as e:
+                                    response_data = {"text": "", "error": f"Speech recognition failed: {e}"}
+                                    status_code = 200
+                        finally:
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+                    except Exception as e:
+                        response_data = {"text": "", "error": f"Audio processing failed: {e}"}
+                        status_code = 500
                 else:
                     response_data = {"error": "Missing audio data"}
                     status_code = 400
