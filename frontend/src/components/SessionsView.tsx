@@ -51,6 +51,16 @@ export default function SessionsView() {
       // Trigger auto-save after 1.5 seconds of inactivity
       triggerAutoSave(editor.getHTML());
     },
+    onFocus: ({ editor }) => {
+      const today = new Date();
+      const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+      const html = editor.getHTML();
+      if (!html.includes(dateString)) {
+        const heading = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3>`;
+        const cleanHtml = (html === "<p></p>" || html === "") ? "" : html;
+        editor.commands.setContent(cleanHtml + heading);
+      }
+    },
     editorProps: {
       attributes: {
         class: "prose prose-slate focus:outline-none max-w-none h-full min-h-[400px] text-slate-800 leading-relaxed font-sans px-2",
@@ -148,7 +158,10 @@ export default function SessionsView() {
   const handleCreateSession = async () => {
     try {
       setLoading(true);
-      const res = await createSession("Untitled Study Session", "");
+      const today = new Date();
+      const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+      const initialContent = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3><p></p>`;
+      const res = await createSession("Untitled Study Session", initialContent);
       const newSession = {
         session_id: res.session_id,
         title: res.title,
@@ -252,6 +265,16 @@ export default function SessionsView() {
     const verseText = e.dataTransfer.getData("text/plain");
     
     if (verseId && verseText && editor) {
+      // Ensure date header exists
+      const today = new Date();
+      const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+      const html = editor.getHTML();
+      if (!html.includes(dateString)) {
+        const heading = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3>`;
+        const cleanHtml = (html === "<p></p>" || html === "") ? "" : html;
+        editor.commands.setContent(cleanHtml + heading);
+      }
+
       // Append beautifully formatted Quote Block
       editor.commands.insertContent(
         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`

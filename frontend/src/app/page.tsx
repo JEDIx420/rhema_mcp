@@ -15,6 +15,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Save } from "lucide-react";
 import { fetchSessions, updateSession } from "@/lib/api";
 
+const addDateHeaderIfNeeded = (currentContent: string) => {
+  const today = new Date();
+  const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const cleanContent = currentContent ? currentContent.trim() : "";
+  if (!cleanContent.includes(dateString)) {
+    const heading = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3>`;
+    if (cleanContent === "" || cleanContent === "<p></p>" || cleanContent === "<h3></h3>") {
+      return heading;
+    } else {
+      return cleanContent + heading;
+    }
+  }
+  return currentContent;
+};
+
 export default function Home() {
   const [activeView, setActiveView] = useState("read");
   const [book, setBook] = useState("GEN");
@@ -168,7 +183,12 @@ export default function Home() {
     try {
       const targetSession = studySessionsList.find(s => s.session_id === reviewTargetSessionId);
       if (!targetSession) return;
-      const updatedContent = (targetSession.content || "") + `<p>${transcribedText.trim()}</p>`;
+      
+      const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
+      const timeString = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+      const timestampHtml = `<span style="color: #94a3b8; font-family: monospace; font-size: 0.85em; margin-right: 6px;">[${timeString}]</span>`;
+      
+      const updatedContent = contentWithDate + `<p>${timestampHtml}${transcribedText.trim()}</p>`;
       await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
       
       window.dispatchEvent(new CustomEvent("rhema-session-updated"));
@@ -337,7 +357,8 @@ export default function Home() {
                   if (targetSessionId) {
                     const targetSession = studySessionsList.find(s => s.session_id === targetSessionId);
                     if (targetSession) {
-                      const updatedContent = (targetSession.content || "") + 
+                      const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
+                      const updatedContent = contentWithDate + 
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(targetSession.session_id, targetSession.title, updatedContent);
                       
@@ -349,7 +370,8 @@ export default function Home() {
                     const sessions = sessionsRes.sessions || [];
                     if (sessions.length > 0) {
                       const latest = sessions[0];
-                      const updatedContent = (latest.content || "") + 
+                      const contentWithDate = addDateHeaderIfNeeded(latest.content || "");
+                      const updatedContent = contentWithDate + 
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(latest.session_id, latest.title, updatedContent);
                       

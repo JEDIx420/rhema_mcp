@@ -5,6 +5,21 @@ import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight, Plus, Notebook } f
 import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
 import { getBookName } from "@/lib/books";
 
+const addDateHeaderIfNeeded = (currentContent: string) => {
+  const today = new Date();
+  const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const cleanContent = currentContent ? currentContent.trim() : "";
+  if (!cleanContent.includes(dateString)) {
+    const heading = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3>`;
+    if (cleanContent === "" || cleanContent === "<p></p>" || cleanContent === "<h3></h3>") {
+      return heading;
+    } else {
+      return cleanContent + heading;
+    }
+  }
+  return currentContent;
+};
+
 interface MorphologyWord {
   word: string;
   lemma?: string;
@@ -201,7 +216,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
   const handleCreateSessionInPane = async () => {
     if (!newSessionTitle.trim()) return;
     try {
-      const res = await createSession(newSessionTitle.trim(), "");
+      const today = new Date();
+      const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+      const initialContent = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3><p></p>`;
+      const res = await createSession(newSessionTitle.trim(), initialContent);
       setNewSessionTitle("");
       await loadStudyPaneSessions();
       setSelectedSessionId(res.session_id);
@@ -219,9 +237,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     const active = studySessions.find(s => s.session_id === selectedSessionId);
     if (!active) return;
     try {
+      const contentWithDate = addDateHeaderIfNeeded(active.content || "");
       const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      const noteHtml = `<p><strong>[${timestamp}]</strong>: ${quickNote.trim()}</p>`;
-      const updatedContent = (active.content || "") + noteHtml;
+      const noteHtml = `<p><span style="color: #94a3b8; font-family: monospace; font-size: 0.85em; margin-right: 6px;">[${timestamp}]</span>${quickNote.trim()}</p>`;
+      const updatedContent = contentWithDate + noteHtml;
       await updateSession(selectedSessionId, active.title, updatedContent);
       setQuickNote("");
       await loadStudyPaneSessions();
