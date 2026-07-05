@@ -185,10 +185,9 @@ export default function Home() {
       if (!targetSession) return;
       
       const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
-      const timeString = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
-      const timestampHtml = `<span style="color: #94a3b8; font-family: monospace; font-size: 0.85em; margin-right: 6px;">[${timeString}]</span>`;
+      const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
       
-      const updatedContent = contentWithDate + `<p>${timestampHtml}${transcribedText.trim()}</p>`;
+      const updatedContent = contentWithDate + `<p><strong>[${timestamp}]</strong>: ${transcribedText.trim()}</p>`;
       await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
       
       window.dispatchEvent(new CustomEvent("rhema-session-updated"));

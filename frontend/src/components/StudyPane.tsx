@@ -238,8 +238,8 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     if (!active) return;
     try {
       const contentWithDate = addDateHeaderIfNeeded(active.content || "");
-      const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      const noteHtml = `<p><span style="color: #94a3b8; font-family: monospace; font-size: 0.85em; margin-right: 6px;">[${timestamp}]</span>${quickNote.trim()}</p>`;
+      const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
+      const noteHtml = `<p><strong>[${timestamp}]</strong>: ${quickNote.trim()}</p>`;
       const updatedContent = contentWithDate + noteHtml;
       await updateSession(selectedSessionId, active.title, updatedContent);
       setQuickNote("");

@@ -155,3 +155,32 @@
 .custom-modal-scroll::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* TipTap Editor Prose Heading styles */
+.prose h1 {
+  font-size: 1.8rem !important;
+  font-weight: 800 !important;
+  color: var(--text-primary) !important;
+  margin-top: 1.75rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.prose h2 {
+  font-size: 1.4rem !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 0.6rem !important;
+}
+
+.prose h3 {
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: #2563eb !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 0.6rem !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  padding-bottom: 0.25rem !important;
+  font-family: var(--font-sans), sans-serif !important;
+}
+
