@@ -48,7 +48,7 @@ export default function Sidebar({
             boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
           }}
         >
-          rh
+          tg
         </div>
         <AnimatePresence>
           {hovered && (
@@ -61,7 +61,7 @@ export default function Sidebar({
                 backgroundImage: "linear-gradient(to right, #0f172a, #2563eb)",
               }}
             >
-              Rhema
+              Targum
             </motion.span>
           )}
         </AnimatePresence>

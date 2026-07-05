@@ -3,7 +3,7 @@ import sqlite3
 import json
 import os
 
-mcp = FastMCP("Rhema Study Engine")
+mcp = FastMCP("Targum Study Engine")
 DB_PATH = os.path.join(os.path.dirname(__file__), "rhema.db")
 
 def get_db_connection():

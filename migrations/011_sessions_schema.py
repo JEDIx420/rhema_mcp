@@ -59,8 +59,8 @@ def main():
         if count == 0:
             print("Seeding welcome session...")
             welcome_id = "welcome_session_001"
-            welcome_title = "Welcome to Rhema Study Workspace"
-            welcome_content = """<h2>Getting Started with Rhema Active Study</h2>
+            welcome_title = "Welcome to Targum Study Workspace"
+            welcome_content = """<h2>Getting Started with Targum Active Study</h2>
 <p>This interactive workspace is designed for deep scripture reflection and note-taking.</p>
 <h3>Workspace Features:</h3>
 <ul>
