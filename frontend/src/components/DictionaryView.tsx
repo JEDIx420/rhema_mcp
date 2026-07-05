@@ -42,12 +42,12 @@ export default function DictionaryView() {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: refId, verseText: text } });
+    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: refId, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("rhema-drag-end");
+    const dragEvent = new CustomEvent("targum-drag-end");
     window.dispatchEvent(dragEvent);
   };
 

@@ -17,6 +17,8 @@ import {
   ExternalLink,
   Check,
   Plus,
+  Play,
+  Pause,
 } from "lucide-react";
 import { fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
@@ -361,11 +363,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     | { status: "success"; verses: Verse[] };
 
   const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
+  const verses = fetchState.status === "success" ? fetchState.verses : [];
   const [showBookPicker, setShowBookPicker] = useState(false);
   const [textSize, setTextSize] = useState(17);
   const [enabledTranslations, setEnabledTranslations] = useState(
     TRANSLATIONS.map((t) => ({ ...t }))
   );
+  const activeTranslations = enabledTranslations.filter((t) => t.enabled);
   
   // Exegesis Drawer States
   const [selectedVerse, setSelectedVerse] = useState<VerseDetail | null>(null);
@@ -377,7 +381,97 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
 
+  // Chapter Playback States
+  const [isPlayingChapter, setIsPlayingChapter] = useState(false);
+  const [chapterPlayLanguage, setChapterPlayLanguage] = useState<string>("text_en");
+  const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number>(-1);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleStopChapter = () => {
+    setIsPlayingChapter(false);
+    setCurrentPlayingIndex(-1);
+    setSpeakingKey(null);
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+  };
+
+  const handlePlayChapter = () => {
+    if (isPlayingChapter) {
+      handleStopChapter();
+    } else {
+      setSpeakingKey(null);
+      setIsPlayingChapter(true);
+      setCurrentPlayingIndex(0);
+    }
+  };
+
+  // Sync language selection when active translations change
+  useEffect(() => {
+    if (activeTranslations.length > 0) {
+      if (!activeTranslations.some(t => t.key === chapterPlayLanguage)) {
+        setChapterPlayLanguage(activeTranslations[0].key);
+      }
+    }
+  }, [activeTranslations]);
+
+  // Handle sequential play
+  useEffect(() => {
+    if (isPlayingChapter && currentPlayingIndex >= 0 && currentPlayingIndex < verses.length) {
+      const playNext = async () => {
+        try {
+          const v = verses[currentPlayingIndex];
+          const text = chapterPlayLanguage === "text_en" 
+            ? v.text_en 
+            : chapterPlayLanguage === "text_original" 
+              ? v.text_original 
+              : (v as any)[chapterPlayLanguage];
+          const isGreek = BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT";
+          const langCode = chapterPlayLanguage === "text_original"
+            ? (isGreek ? "el" : "he")
+            : chapterPlayLanguage.replace("text_", "");
+
+          setSpeakingKey(`${v.id}-${chapterPlayLanguage}`);
+
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
+          const res = await fetch(`${apiBase}/api/tts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, language_code: langCode })
+          });
+          if (!res.ok) throw new Error("TTS failed");
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          currentAudioRef.current = audio;
+          audio.play();
+          audio.onended = () => {
+            setCurrentPlayingIndex((prev) => prev + 1);
+          };
+          audio.onerror = () => {
+            setCurrentPlayingIndex((prev) => prev + 1);
+          };
+        } catch (err) {
+          console.error("Chapter play failed", err);
+          handleStopChapter();
+        }
+      };
+      playNext();
+    } else if (isPlayingChapter && currentPlayingIndex >= verses.length) {
+      handleStopChapter();
+    }
+  }, [isPlayingChapter, currentPlayingIndex, verses, chapterPlayLanguage]);
+
+  // Stop playback when chapter or book changes
+  useEffect(() => {
+    handleStopChapter();
+  }, [book, chapter]);
+
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
+    if (isPlayingChapter) {
+      handleStopChapter();
+    }
     try {
       setSpeakingKey(key);
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
@@ -403,12 +497,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     e.dataTransfer.setData("text/plain", verseText);
     e.dataTransfer.setData("application/verse-id", verseId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId, verseText } });
+    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId, verseText } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEndEvent = new CustomEvent("rhema-drag-end");
+    const dragEndEvent = new CustomEvent("targum-drag-end");
     window.dispatchEvent(dragEndEvent);
   };
 
@@ -477,7 +571,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   const loading = fetchState.status === "loading";
   const error = fetchState.status === "error" ? fetchState.message : null;
-  const verses = fetchState.status === "success" ? fetchState.verses : [];
 
   const handleVerseClick = async (verseId: string) => {
     setLoadingDetail(true);
@@ -526,8 +619,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       prev.map((t) => (t.key === key ? { ...t, enabled: !t.enabled } : t))
     );
   };
-
-  const activeTranslations = enabledTranslations.filter((t) => t.enabled);
 
   // Audio synthesis helper
   const speakWord = async (word: string, isGreek: boolean) => {
@@ -896,7 +987,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 }).then(r => r.json());
                 
                 if (res.session_id) {
-                  window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                  window.dispatchEvent(new CustomEvent("targum-session-updated"));
                   if (props.onViewChange) props.onViewChange("sessions");
                 }
               } catch (err) {
@@ -1016,6 +1107,42 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 {getBookName(book)} {chapter}
               </h2>
 
+              {/* Play Chapter Control Bar */}
+              <div className="flex items-center gap-3.5 mb-6 p-2 bg-slate-50 border border-slate-200/60 rounded-xl max-w-max select-none">
+                <button
+                  onClick={handlePlayChapter}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-xs cursor-pointer ${
+                    isPlayingChapter 
+                      ? "bg-red-500 hover:bg-red-600 text-white" 
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  {isPlayingChapter ? (
+                    <>
+                      <Pause size={14} /> Stop Chapter
+                    </>
+                  ) : (
+                    <>
+                      <Play size={14} /> Play Chapter
+                    </>
+                  )}
+                </button>
+                <div className="flex items-center gap-1.5 pr-2">
+                  <span className="text-xs text-slate-555 font-semibold font-sans">Language:</span>
+                  <select
+                    value={chapterPlayLanguage}
+                    onChange={(e) => setChapterPlayLanguage(e.target.value)}
+                    className="text-xs border border-slate-200 bg-white rounded-md px-2.5 py-1.5 outline-none text-slate-800 font-sans cursor-pointer hover:border-slate-350 transition-colors"
+                  >
+                    {activeTranslations.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {verses.map((v) => {
                 const isSelected = selectedVerse?.verse?.id === v.id;
                 return (
@@ -1063,12 +1190,19 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                               </span>
                             )}
                           </div>
-                          {t.key !== "text_original" && ((v as any)[t.key] || t.key === "text_en") && (
+                          {((v as any)[t.key] || t.key === "text_en" || t.key === "text_original") && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const text = t.key === "text_en" ? v.text_en : (v as any)[t.key];
-                                const langCode = t.key.replace("text_", "");
+                                const isGreek = BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT";
+                                const text = t.key === "text_en" 
+                                  ? v.text_en 
+                                  : t.key === "text_original" 
+                                    ? v.text_original 
+                                    : (v as any)[t.key];
+                                const langCode = t.key === "text_original"
+                                  ? (isGreek ? "el" : "he")
+                                  : t.key.replace("text_", "");
                                 handleSpeakText(text, langCode, `${v.id}-${t.key}`);
                               }}
                               className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 opacity-50 group-hover/col:opacity-100 ${

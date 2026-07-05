@@ -56,12 +56,12 @@ export default function Sidebar({
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
-              className="ml-3 font-bold text-sm tracking-wider uppercase bg-clip-text text-transparent font-sans"
+              className="ml-3 font-bold text-sm tracking-wider lowercase bg-clip-text text-transparent font-sans"
               style={{
                 backgroundImage: "linear-gradient(to right, #0f172a, #2563eb)",
               }}
             >
-              Targum
+              targum
             </motion.span>
           )}
         </AnimatePresence>

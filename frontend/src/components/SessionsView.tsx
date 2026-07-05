@@ -3,6 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { Mark } from "@tiptap/core";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Underline } from "@tiptap/extension-underline";
+import { TextAlign } from "@tiptap/extension-text-align";
 import { 
   Notebook, 
   Plus, 
@@ -13,7 +17,20 @@ import {
   Check, 
   Loader2,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Undo2,
+  Redo2,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  List,
+  ListOrdered,
+  Quote
 } from "lucide-react";
 import { 
   fetchSessions, 
@@ -31,6 +48,34 @@ interface Session {
   updated_at: string;
 }
 
+const FontSize = Mark.create({
+  name: 'fontSize',
+  addAttributes() {
+    return {
+      size: {
+        default: null,
+        parseHTML: element => element.style.fontSize,
+        renderHTML: attributes => {
+          if (!attributes.size) {
+            return {}
+          }
+          return { style: `font-size: ${attributes.size}` }
+        },
+      },
+    }
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span[style*=font-size]',
+      },
+    ]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', HTMLAttributes, 0]
+  }
+});
+
 export default function SessionsView() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -45,7 +90,15 @@ export default function SessionsView() {
 
   // Initialize TipTap
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      Underline,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      TextStyle,
+      FontSize,
+    ],
     content: "",
     onUpdate: ({ editor }) => {
       // Trigger auto-save after 1.5 seconds of inactivity
@@ -102,7 +155,7 @@ export default function SessionsView() {
   // Dispatch selection changes globally
   useEffect(() => {
     if (selectedSession) {
-      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
         detail: { sessionId: selectedSession.session_id, title: selectedSession.title }
       }));
     }
@@ -122,8 +175,8 @@ export default function SessionsView() {
         }
       }
     };
-    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged);
-    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged);
   }, [sessions, selectedSession]);
 
   // Update editor content when active session changes
@@ -429,17 +482,241 @@ export default function SessionsView() {
               </div>
             </div>
 
+            {/* Formatting Toolbar */}
+            <div className="border-b border-slate-200 bg-slate-50/50 p-2 flex flex-wrap items-center gap-1 shrink-0 select-none">
+              {/* Undo / Redo */}
+              <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().undo().run()}
+                  disabled={!editor?.can().undo()}
+                  className="p-1.5 rounded-lg hover:bg-slate-200/60 text-slate-600 disabled:opacity-30 cursor-pointer transition-colors"
+                  title="Undo"
+                >
+                  <Undo2 size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().redo().run()}
+                  disabled={!editor?.can().redo()}
+                  className="p-1.5 rounded-lg hover:bg-slate-200/60 text-slate-600 disabled:opacity-30 cursor-pointer transition-colors"
+                  title="Redo"
+                >
+                  <Redo2 size={16} />
+                </button>
+              </div>
+
+              {/* Headings & Text Styles */}
+              <div className="flex items-center gap-1 border-r border-slate-200 pr-1.5 mr-1.5">
+                <select
+                  value={
+                    editor?.isActive('heading', { level: 1 }) ? 'h1' :
+                    editor?.isActive('heading', { level: 2 }) ? 'h2' :
+                    editor?.isActive('heading', { level: 3 }) ? 'h3' : 'p'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'p') editor?.chain().focus().setParagraph().run();
+                    else if (val === 'h1') editor?.chain().focus().toggleHeading({ level: 1 }).run();
+                    else if (val === 'h2') editor?.chain().focus().toggleHeading({ level: 2 }).run();
+                    else if (val === 'h3') editor?.chain().focus().toggleHeading({ level: 3 }).run();
+                  }}
+                  className="text-xs border border-slate-200 bg-white rounded-md px-2 py-1.5 outline-none text-slate-800 font-sans cursor-pointer hover:border-slate-350 transition-colors font-medium"
+                >
+                  <option value="p">Normal Text</option>
+                  <option value="h1">Heading 1</option>
+                  <option value="h2">Heading 2</option>
+                  <option value="h3">Heading 3</option>
+                </select>
+              </div>
+
+              {/* Font Size Selector */}
+              <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                <select
+                  value={editor?.getAttributes('fontSize').size || '16px'}
+                  onChange={(e) => {
+                    const size = e.target.value;
+                    if (size === 'default') {
+                      editor?.chain().focus().unsetMark('fontSize').run();
+                    } else {
+                      editor?.chain().focus().setMark('fontSize', { size }).run();
+                    }
+                  }}
+                  className="text-xs border border-slate-200 bg-white rounded-md px-2 py-1.5 outline-none text-slate-800 font-sans cursor-pointer hover:border-slate-350 transition-colors font-medium"
+                >
+                  <option value="12px">12px</option>
+                  <option value="14px">14px</option>
+                  <option value="16px">16px (Default)</option>
+                  <option value="18px">18px</option>
+                  <option value="20px">20px</option>
+                  <option value="24px">24px</option>
+                  <option value="30px">30px</option>
+                  <option value="36px">36px</option>
+                  <option value="48px">48px</option>
+                </select>
+
+                {/* Font Size Increase / Decrease Buttons */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = editor?.getAttributes('fontSize').size || '16px';
+                    const num = parseInt(current, 10) || 16;
+                    const next = Math.min(72, num + 2);
+                    editor?.chain().focus().setMark('fontSize', { size: `${next}px` }).run();
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-slate-200/60 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+                  title="Increase Font Size"
+                >
+                  A<sup>+</sup>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = editor?.getAttributes('fontSize').size || '16px';
+                    const num = parseInt(current, 10) || 16;
+                    const next = Math.max(8, num - 2);
+                    editor?.chain().focus().setMark('fontSize', { size: `${next}px` }).run();
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-slate-200/60 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+                  title="Decrease Font Size"
+                >
+                  A<sup>-</sup>
+                </button>
+              </div>
+
+              {/* Bold, Italic, Underline, Strikethrough */}
+              <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleBold().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('bold') ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Bold"
+                >
+                  <Bold size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleItalic().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('italic') ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Italic"
+                >
+                  <Italic size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleUnderline().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('underline') ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Underline"
+                >
+                  <UnderlineIcon size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleStrike().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('strike') ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Strikethrough"
+                >
+                  <Strikethrough size={15} />
+                </button>
+              </div>
+
+              {/* Text Alignments */}
+              <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Align Left"
+                >
+                  <AlignLeft size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Align Center"
+                >
+                  <AlignCenter size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive({ textAlign: 'right' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Align Right"
+                >
+                  <AlignRight size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().setTextAlign('justify').run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive({ textAlign: 'justify' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Align Justify"
+                >
+                  <AlignJustify size={15} />
+                </button>
+              </div>
+
+              {/* Lists */}
+              <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Bullet List"
+                >
+                  <List size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Numbered List"
+                >
+                  <ListOrdered size={15} />
+                </button>
+              </div>
+
+              {/* Blockquote */}
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                  className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                    editor?.isActive('blockquote') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200/60 text-slate-600'
+                  }`}
+                  title="Blockquote"
+                >
+                  <Quote size={15} />
+                </button>
+              </div>
+            </div>
+
             {/* Hint Dropzone Area */}
             <div 
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDropVerse}
               className="flex-1 overflow-y-auto p-8 relative group"
             >
-              {/* Overlay Drop Target Hint */}
-              <div className="absolute inset-4 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50/30 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-blue-600 text-sm font-semibold font-sans">
-                <Notebook size={16} /> Drop Scripture here to insert quote block
-              </div>
-              
               <EditorContent editor={editor} className="h-full" />
             </div>
 

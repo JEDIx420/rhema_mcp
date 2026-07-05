@@ -71,12 +71,12 @@ export default function Home() {
       setDraggedVerse(null);
     };
 
-    window.addEventListener("rhema-drag-start", handleDragStartEvent);
-    window.addEventListener("rhema-drag-end", handleDragEndEvent);
+    window.addEventListener("targum-drag-start", handleDragStartEvent);
+    window.addEventListener("targum-drag-end", handleDragEndEvent);
 
     return () => {
-      window.removeEventListener("rhema-drag-start", handleDragStartEvent);
-      window.removeEventListener("rhema-drag-end", handleDragEndEvent);
+      window.removeEventListener("targum-drag-start", handleDragStartEvent);
+      window.removeEventListener("targum-drag-end", handleDragEndEvent);
     };
   }, []);
 
@@ -89,8 +89,8 @@ export default function Home() {
         setActiveSessionTitle(customEvent.detail.title);
       }
     };
-    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged);
-    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged);
+    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged);
   }, []);
 
   // Fetch initial active session list and selection
@@ -113,8 +113,8 @@ export default function Home() {
     const handleSessionUpdated = () => {
       initActiveSession();
     };
-    window.addEventListener("rhema-session-updated", handleSessionUpdated);
-    return () => window.removeEventListener("rhema-session-updated", handleSessionUpdated);
+    window.addEventListener("targum-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("targum-session-updated", handleSessionUpdated);
   }, [activeSessionId]);
 
   const startRecording = async () => {
@@ -168,6 +168,7 @@ export default function Home() {
       setIsRecording(true);
     } catch (err) {
       console.error("Microphone access denied", err);
+      alert("Microphone access denied or not supported: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -190,8 +191,8 @@ export default function Home() {
       const updatedContent = contentWithDate + `<p><strong>[${timestamp}]</strong>: ${transcribedText.trim()}</p>`;
       await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
       
-      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
-      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("targum-session-updated"));
+      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
         detail: { sessionId: reviewTargetSessionId, title: targetSession.title }
       }));
       
@@ -361,7 +362,7 @@ export default function Home() {
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(targetSession.session_id, targetSession.title, updatedContent);
                       
-                      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                      window.dispatchEvent(new CustomEvent("targum-session-updated"));
                       setActiveView("sessions");
                     }
                   } else {
@@ -374,7 +375,7 @@ export default function Home() {
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(latest.session_id, latest.title, updatedContent);
                       
-                      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+                      window.dispatchEvent(new CustomEvent("targum-session-updated"));
                       setActiveView("sessions");
                     }
                   }

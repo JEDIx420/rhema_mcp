@@ -34,6 +34,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [scrubYear, setScrubYear] = useState<number>(-1446);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -43,6 +44,7 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
           setEvents(data.events || []);
           if (data.events && data.events.length > 0) {
             setScrubYear(data.events[0].year);
+            setSelectedEventId(data.events[0].event_id);
           }
         }
       })
@@ -64,13 +66,17 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
     return `AD ${yr}`;
   };
 
-  // Find the event closest to the scrub Year
+  // Find the event closest to the scrub Year or matching selectedEventId
   const closestEvent = useMemo(() => {
     if (events.length === 0) return null;
+    if (selectedEventId) {
+      const found = events.find((e) => e.event_id === selectedEventId);
+      if (found) return found;
+    }
     return events.reduce((prev, curr) => {
       return Math.abs(curr.year - scrubYear) < Math.abs(prev.year - scrubYear) ? curr : prev;
     });
-  }, [events, scrubYear]);
+  }, [events, scrubYear, selectedEventId]);
 
   const handleDragStart = (e: React.DragEvent, title: string, year: number, location: string, description: string) => {
     const yrStr = year < 0 ? `${Math.abs(year)} BC` : `AD ${year}`;
@@ -79,12 +85,12 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: refId, verseText: text } });
+    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: refId, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("rhema-drag-end");
+    const dragEvent = new CustomEvent("targum-drag-end");
     window.dispatchEvent(dragEvent);
   };
 
@@ -144,7 +150,10 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                       draggable
                       onDragStart={(e) => handleDragStart(e, item.title, item.year, item.location, item.description)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => setScrubYear(item.year)}
+                      onClick={() => {
+                        setScrubYear(item.year);
+                        setSelectedEventId(item.event_id);
+                      }}
                       className="flex flex-col items-center cursor-grab active:cursor-grabbing group relative w-36"
                     >
                       {/* Timeline Dot Indicator */}
@@ -257,7 +266,10 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
                       draggable
                       onDragStart={(e) => handleDragStart(e, item.title, item.year, item.location, item.description)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => setScrubYear(item.year)}
+                      onClick={() => {
+                        setScrubYear(item.year);
+                        setSelectedEventId(item.event_id);
+                      }}
                       className="w-full text-left p-4.5 rounded-2xl border transition-all flex items-start gap-4 cursor-grab active:cursor-grabbing hover:bg-slate-50/50"
                       style={{
                         background: isClosest ? "rgba(37, 99, 235, 0.04)" : "transparent",

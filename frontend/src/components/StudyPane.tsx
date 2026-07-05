@@ -171,7 +171,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verseData, setVerseData] = useState<VerseDetail | null>(null);
-  const [activeTab, setActiveTab] = useState<"verse" | "lexicon" | "sessions">("sessions"); // default active to sessions so users instantly see their log!
+  const [activeTab, setActiveTab] = useState<"verse" | "lexicon" | "sessions">("lexicon"); // default active to lexicon always!
   const [activeLexiconWord, setActiveLexiconWord] = useState<string | null>(null);
 
   interface StudyPaneSession {
@@ -201,7 +201,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
           // Keep current selection
         } else {
           setSelectedSessionId(list[0].session_id);
-          window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+          window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
             detail: { sessionId: list[0].session_id, title: list[0].title }
           }));
         }
@@ -223,10 +223,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       setNewSessionTitle("");
       await loadStudyPaneSessions();
       setSelectedSessionId(res.session_id);
-      window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
         detail: { sessionId: res.session_id, title: res.title || newSessionTitle.trim() }
       }));
-      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+      window.dispatchEvent(new CustomEvent("targum-session-updated"));
     } catch (err) {
       console.error(err);
     }
@@ -244,7 +244,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       await updateSession(selectedSessionId, active.title, updatedContent);
       setQuickNote("");
       await loadStudyPaneSessions();
-      window.dispatchEvent(new CustomEvent("rhema-session-updated"));
+      window.dispatchEvent(new CustomEvent("targum-session-updated"));
     } catch (err) {
       console.error(err);
     }
@@ -267,8 +267,8 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
         });
       }
     };
-    window.addEventListener("rhema-session-updated", handleSessionUpdated);
-    return () => window.removeEventListener("rhema-session-updated", handleSessionUpdated);
+    window.addEventListener("targum-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("targum-session-updated", handleSessionUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -282,20 +282,20 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
         }
       }
     };
-    window.addEventListener("rhema-active-session-changed", handleActiveSessionChanged as any);
-    return () => window.removeEventListener("rhema-active-session-changed", handleActiveSessionChanged as any);
+    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged as any);
+    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged as any);
   }, [selectedSessionId]);
 
   const handleStudyPaneDragStart = (e: React.DragEvent, id: string, text: string) => {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", id);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId: id, verseText: text } });
+    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: id, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleStudyPaneDragEnd = () => {
-    const dragEndEvent = new CustomEvent("rhema-drag-end");
+    const dragEndEvent = new CustomEvent("targum-drag-end");
     window.dispatchEvent(dragEndEvent);
   };
 
@@ -331,7 +331,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
         const data = await fetchVerseDetails(verseId);
         if (!cancelled) {
           setVerseData(data);
-          setActiveTab(initialTab || "verse");
+          setActiveTab(initialTab || "lexicon");
           
           if (initialLexiconWord) {
             setActiveLexiconWord(initialLexiconWord);
@@ -372,7 +372,30 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                 setOccurrencesLoading(false);
               }
             } else {
-              setActiveLexiconWord(null);
+              // Extract first word from text_original as fallback
+              const rawWords = (data.verse?.text_original || "").split(/\s+/);
+              const cleanWords = rawWords.map((w: string) => w.replace(/[.,;:!?׃.-]/g, "").trim()).filter(Boolean);
+              if (cleanWords.length > 0) {
+                const firstWord = cleanWords[0];
+                setActiveLexiconWord(firstWord);
+                setLexiconLoading(true);
+                setOccurrencesLoading(true);
+                try {
+                  const lexData = await lookupLexicon(firstWord);
+                  setLexiconData(lexData.results || []);
+                  const occData = await fetchOccurrences(firstWord);
+                  setOccurrences(occData.occurrences || []);
+                } catch {
+                  setLexiconData([]);
+                  setOccurrences([]);
+                } finally {
+                  setLexiconLoading(false);
+                  setOccurrencesLoading(false);
+                }
+              } else {
+                setActiveLexiconWord(null);
+                setActiveTab(initialTab || "verse");
+              }
             }
           }
         }
@@ -429,7 +452,11 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     );
   }
 
-  const morphWords = verseData.verse?.morphology || [];
+  const rawOriginalWords = (verseData.verse?.text_original || "").split(/\s+/);
+  const cleanOriginalWords = rawOriginalWords.map((w: string) => w.replace(/[.,;:!?׃.-]/g, "").trim()).filter(Boolean);
+  const morphWords = verseData.verse?.morphology && verseData.verse.morphology.length > 0
+    ? verseData.verse.morphology
+    : cleanOriginalWords.map((w: string) => ({ word: w, lemma: w }));
   const activeWordIndex = morphWords.findIndex(
     (m) => m.lemma === activeLexiconWord || m.word === activeLexiconWord
   );
@@ -738,7 +765,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   setSelectedSessionId(val);
                   const matched = studySessions.find(s => s.session_id === val);
                   if (matched) {
-                    window.dispatchEvent(new CustomEvent("rhema-active-session-changed", {
+                    window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
                       detail: { sessionId: val, title: matched.title }
                     }));
                   }

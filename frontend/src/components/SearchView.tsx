@@ -38,12 +38,12 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     e.dataTransfer.setData("text/plain", verseText);
     e.dataTransfer.setData("application/verse-id", verseId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("rhema-drag-start", { detail: { verseId, verseText } });
+    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId, verseText } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("rhema-drag-end");
+    const dragEvent = new CustomEvent("targum-drag-end");
     window.dispatchEvent(dragEvent);
   };
 
