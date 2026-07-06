@@ -49,13 +49,36 @@ fn speak_text(
 ) -> Result<(), String> {
     let mut tts = tts_state.lock().map_err(|_| "Failed to lock TTS state")?;
 
+    let mut voice_found = false;
     if let Ok(voices) = tts.voices() {
         let target_lang = lang.to_lowercase().replace('_', "-");
-        if let Some(voice) = voices.into_iter().find(|v| {
+        
+        // Don't enforce check for English (en) because it's the system default fallback
+        if target_lang == "en" {
+            voice_found = true;
+        } else if let Some(voice) = voices.into_iter().find(|v| {
             let v_lang = v.language().to_lowercase().replace('_', "-");
             v_lang == target_lang || v_lang.starts_with(&target_lang) || target_lang.starts_with(&v_lang)
         }) {
             let _ = tts.set_voice(&voice);
+            voice_found = true;
+        }
+
+        if !voice_found {
+            let mut available = Vec::new();
+            if let Ok(all_voices) = tts.voices() {
+                for av in all_voices {
+                    let av_lang = av.language().to_string();
+                    if !available.contains(&av_lang) {
+                        available.push(av_lang);
+                    }
+                }
+            }
+            return Err(format!(
+                "No voice found for language '{}'. Available languages: {}. Please install the Malayalam (ml) voice in macOS Settings -> Accessibility -> Spoken Content -> System Voice.",
+                target_lang,
+                available.join(", ")
+            ));
         }
     }
 
@@ -80,7 +103,7 @@ async fn transcribe_audio(
 
     let mut state = ctx.create_state().map_err(|e| format!("Failed to create Whisper state: {:?}", e))?;
     
-    let mut params = FullParams::new(SamplingStrategy::Greedy);
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
     params.set_language(Some("auto"));
     params.set_n_threads(4);
     params.set_translate(false);
@@ -92,9 +115,9 @@ async fn transcribe_audio(
     state.full(params, &audio_samples[..]).map_err(|e| format!("Whisper execution failed: {:?}", e))?;
 
     let mut result = String::new();
-    let num_segments = state.num_segments().map_err(|e| format!("Failed to get segment count: {:?}", e))?;
+    let num_segments = state.full_n_segments().map_err(|e| format!("Failed to get segment count: {:?}", e))?;
     for i in 0..num_segments {
-        if let Ok(text) = state.segment_text(i) {
+        if let Ok(text) = state.full_get_segment_text(i) {
             result.push_str(&text);
         }
     }
@@ -137,7 +160,7 @@ pub fn run() {
       let whisper_ctx = if let Ok(path) = model_path {
           if path.exists() {
               WhisperContext::new_with_params(
-                  path.to_string_lossy().to_string(),
+                  &path.to_string_lossy(),
                   WhisperContextParameters::default()
               ).ok()
           } else {

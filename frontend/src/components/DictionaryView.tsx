@@ -63,9 +63,10 @@ export default function DictionaryView() {
       speakTimerRef.current = setTimeout(() => {
         setSpeakingKey(null);
       }, duration);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Speak failed", err);
       setSpeakingKey(null);
+      alert(err || "Speech synthesis failed.");
     }
   };
 

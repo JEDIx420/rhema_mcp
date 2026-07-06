@@ -26,6 +26,33 @@ import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
 import { setGlassDragImage } from "@/lib/drag";
 
+interface TextToken {
+  text: string;
+  alignmentId: string | null;
+}
+
+const parseAlignmentText = (text: string): TextToken[] => {
+  if (!text) return [];
+  const tokens: TextToken[] = [];
+  const regex = /(\S+?)(?:\{([^{}]+)\}|\[([^\[\]]+)\]|\|([a-zA-Z0-9_#]+))|(\s+|\S+)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const [_, wordVal, braceId, bracketId, pipeId, plainVal] = match;
+    if (wordVal) {
+      tokens.push({
+        text: wordVal,
+        alignmentId: braceId || bracketId || pipeId || null
+      });
+    } else if (plainVal) {
+      tokens.push({
+        text: plainVal,
+        alignmentId: null
+      });
+    }
+  }
+  return tokens;
+};
+
 const invokeTauri = async (cmd: string, args: any) => {
   if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -566,9 +593,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       singleSpeakTimerRef.current = setTimeout(() => {
         setSpeakingKey(null);
       }, duration);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Speak failed", err);
       setSpeakingKey(null);
+      alert(err || "Speech synthesis failed.");
     }
   };
 
@@ -608,6 +636,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     verseId: string;
     matchedOriginal: string | null;
   } | null>(null);
+  const [hoveredAlignmentId, setHoveredAlignmentId] = useState<string | null>(null);
   const [verseMenu, setVerseMenu] = useState<VerseMenuInfo | null>(null);
   const [copyToast, setCopyToast] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -839,16 +868,28 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       return (
         <div className="flex flex-wrap gap-x-1.5 gap-y-1" style={{ direction: "ltr" }}>
           {v.morphology.map((m: any, idx: number) => {
+            const cleanLemma = m.lemma ? m.lemma.trim().toUpperCase() : "";
+            const cleanStrongs = m.strongs_id ? m.strongs_id.trim().toUpperCase() : "";
+            const isAlignmentHighlighted = hoveredAlignmentId !== null && (cleanLemma === hoveredAlignmentId || cleanStrongs === hoveredAlignmentId);
+
             const isHovered =
               hoveredWord?.word === m.word ||
-              (hoveredEnglishWord?.matchedOriginal === m.word && hoveredEnglishWord?.verseId === v.id);
+              (hoveredEnglishWord?.matchedOriginal === m.word && hoveredEnglishWord?.verseId === v.id) ||
+              isAlignmentHighlighted;
+
             return (
               <span
                 key={idx}
-                onMouseEnter={(e) =>
-                  handleOriginalWordMouseEnter(e, m.word, m.lemma, m.pos, m.parse)
-                }
-                onMouseLeave={handleOriginalWordMouseLeave}
+                onMouseEnter={(e) => {
+                  handleOriginalWordMouseEnter(e, m.word, m.lemma, m.pos, m.parse);
+                  if (cleanLemma || cleanStrongs) {
+                    setHoveredAlignmentId(cleanLemma || cleanStrongs);
+                  }
+                }}
+                onMouseLeave={() => {
+                  handleOriginalWordMouseLeave();
+                  setHoveredAlignmentId(null);
+                }}
                 onClick={() => {
                   handleVerseClick(v.id);
                   handleOriginalWordClick(m.word, m.lemma);
@@ -907,7 +948,59 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     }
   };
 
-  // Render English text with hover mapping
+  // Render alignment text (for English, Hindi, Tamil, Telugu, Malayalam) with cross-language hover sync
+  const renderAlignmentText = (text: string, verseId: string) => {
+    if (!text) return <span className="text-slate-400">—</span>;
+
+    const tokens = parseAlignmentText(text);
+    const hasAnyAlignments = tokens.some((t) => t.alignmentId !== null);
+
+    if (!hasAnyAlignments) {
+      // Safe fallback: render text normally as a plain text block
+      return (
+        <span
+          className="leading-relaxed text-sm font-medium text-slate-800"
+          style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-inter), sans-serif" }}
+        >
+          {text}
+        </span>
+      );
+    }
+
+    return (
+      <span
+        className="leading-relaxed text-sm font-medium text-slate-805"
+        style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-inter), sans-serif" }}
+      >
+        {tokens.map((token, idx) => {
+          if (token.alignmentId === null) {
+            return <span key={idx}>{token.text}</span>;
+          }
+
+          const cleanId = token.alignmentId.trim().toUpperCase();
+          const isHighlighted = hoveredAlignmentId === cleanId;
+
+          return (
+            <span
+              key={idx}
+              data-alignment-id={cleanId}
+              onMouseEnter={() => setHoveredAlignmentId(cleanId)}
+              onMouseLeave={() => setHoveredAlignmentId(null)}
+              className={`inline-block px-0.5 transition-all duration-100 cursor-help ${
+                isHighlighted
+                  ? "bg-blue-50/50 outline outline-1 outline-blue-200 rounded-sm text-blue-700 font-semibold"
+                  : "text-inherit"
+              }`}
+            >
+              {token.text}
+            </span>
+          );
+        })}
+      </span>
+    );
+  };
+
+  // Render English text with hover mapping (legacy morphology-matching fallback)
   const renderEnglishTextWithHover = (v: Verse) => {
     const isOT = BIBLE_BOOKS.find((b) => b.code === v.book)?.testament === "OT";
     const wordsWithPunct = v.text_en.split(/(\s+)/);
@@ -1273,14 +1366,11 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                             {t.key === "text_original" ? (
                               renderOriginalText(v)
                             ) : t.key === "text_en" ? (
-                              renderEnglishTextWithHover(v)
+                              v.text_en.includes("{") || v.text_en.includes("[") || v.text_en.includes("|")
+                                ? renderAlignmentText(v.text_en, v.id)
+                                : renderEnglishTextWithHover(v)
                             ) : (
-                              <span
-                                className="leading-relaxed"
-                                style={{ fontSize: `${textSize}px`, color: "var(--text-primary)" }}
-                              >
-                                {(v as any)[t.key] || "—"}
-                              </span>
+                              renderAlignmentText((v as any)[t.key] || "", v.id)
                             )}
                           </div>
                           {((v as any)[t.key] || t.key === "text_en" || t.key === "text_original") && (
