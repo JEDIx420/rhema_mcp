@@ -4,7 +4,7 @@ import urllib.request
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 # KJV abbreviations from en_kjv.json mapped to standard 3-letter codes
 KJV_ABBREV_MAP = {

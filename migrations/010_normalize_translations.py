@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 def main():
     if not os.path.exists(DB_PATH):

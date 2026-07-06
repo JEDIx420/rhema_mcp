@@ -5,70 +5,7 @@ import { motion } from "framer-motion";
 import { Search, Loader2, BookMarked, BookOpen, Volume2 } from "lucide-react";
 import { searchLexicon, searchTopics } from "@/lib/api";
 import { setGlassDragImage } from "@/lib/drag";
-
-const stripAlignmentTags = (text: string): string => {
-  if (!text) return "";
-  return text
-    .replace(/<w[^>]*>(.*?)<\/w>/g, "$1")
-    .replace(/(\S+?)(?:\{[^{}]+\}|\[[^\[\]]+\]|\|[a-zA-Z0-9_#]+)/g, "$1")
-    .replace(/\{[^{}]+\}/g, "")
-    .replace(/\[[^\[\]]+\]/g, "")
-    .trim();
-};
-
-const invokeTauri = async (cmd: string, args: any) => {
-  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke(cmd, args);
-  }
-  
-  if (typeof window !== "undefined") {
-    if (cmd === "speak_text") {
-      const { text, lang } = args || {};
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        let mappedLang = (lang || "en").replace('_', '-');
-        if (mappedLang === "hi") mappedLang = "hi-IN";
-        else if (mappedLang === "te") mappedLang = "te-IN";
-        else if (mappedLang === "ta") mappedLang = "ta-IN";
-        else if (mappedLang === "ml") mappedLang = "ml-IN";
-        else if (mappedLang === "el") mappedLang = "el-GR";
-        else if (mappedLang === "he") mappedLang = "he-IL";
-        else if (mappedLang === "en") mappedLang = "en-US";
-        utterance.lang = mappedLang;
-
-        // Try to explicitly match a voice
-        const voices = window.speechSynthesis.getVoices();
-        const matchingVoice = voices.find(v => {
-          const vLang = v.lang.toLowerCase().replace('_', '-');
-          const target = mappedLang.toLowerCase();
-          return vLang === target || vLang.startsWith(target + "-") || target.startsWith(vLang + "-");
-        });
-
-        if (matchingVoice) {
-          utterance.voice = matchingVoice;
-          window.speechSynthesis.speak(utterance);
-          return;
-        }
-
-        // If it's a non-English language and no voice matches, throw to trigger online fallback
-        if (mappedLang !== "en-US") {
-          throw new Error(`No browser voice found for ${mappedLang}`);
-        }
-
-        window.speechSynthesis.speak(utterance);
-        return;
-      }
-    } else if (cmd === "stop_speech") {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        return;
-      }
-    }
-  }
-  throw new Error("Tauri IPC bridge not available in this environment");
-};
+import { invokeSpeech } from "@/lib/speech";
 
 export default function DictionaryView() {
   const [query, setQuery] = useState("");
@@ -79,34 +16,22 @@ export default function DictionaryView() {
   const [searched, setSearched] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
   const speakTimerRef = useRef<any>(null);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     return () => {
       if (speakTimerRef.current) {
         clearTimeout(speakTimerRef.current);
       }
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
     };
   }, []);
 
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
-    await invokeTauri("stop_speech", {}).catch(() => {});
-
-    const cleanText = stripAlignmentTags(text);
-
     try {
       setSpeakingKey(key);
-      await invokeTauri("speak_text", { text: cleanText, lang: langCode });
-      
-      const duration = Math.max(2000, cleanText.length * 95 + 600);
+      await invokeSpeech("stop_speech", {}).catch(() => { });
+      await invokeSpeech("speak_text", { text, lang: langCode });
+
+      const duration = Math.max(2000, text.length * 95 + 600);
       if (speakTimerRef.current) {
         clearTimeout(speakTimerRef.current);
       }
@@ -114,49 +39,9 @@ export default function DictionaryView() {
         setSpeakingKey(null);
       }, duration);
     } catch (err: any) {
-      console.warn("Local offline TTS failed, trying online fallback...", err);
-      
-      // Fallback to client-side Google Translate TTS online engine
-      try {
-        setSpeakingKey(key);
-        let gtLang = langCode;
-        if (gtLang === "he") gtLang = "iw"; // Google Translate uses 'iw' for Hebrew
-        
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${gtLang}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
-        const audio = new Audio(ttsUrl);
-        currentAudioRef.current = audio;
-        
-        const duration = Math.max(2000, cleanText.length * 95 + 600);
-        if (speakTimerRef.current) {
-          clearTimeout(speakTimerRef.current);
-        }
-        speakTimerRef.current = setTimeout(() => {
-          setSpeakingKey(null);
-        }, duration);
-
-        await audio.play();
-        audio.onended = () => {
-          setSpeakingKey(null);
-          currentAudioRef.current = null;
-        };
-        audio.onerror = () => {
-          setSpeakingKey(null);
-          currentAudioRef.current = null;
-          console.error("Online TTS playback failed");
-        };
-      } catch (fallbackErr) {
-        console.error("Google TTS fallback failed", fallbackErr);
-        setSpeakingKey(null);
-        alert(
-          `Speech Synthesis: Malayalam Voice Missing\n\n` +
-          `Reason: An offline Malayalam speech voice is not installed on your macOS system.\n\n` +
-          `To fix this and enable Malayalam speech (in both the browser and the desktop app):\n` +
-          `1. Open macOS "System Settings" -> "Accessibility" -> "Spoken Content".\n` +
-          `2. Click the "System Voice" dropdown and select "Manage Voices...".\n` +
-          `3. Search for "Malayalam" and click the download icon next to the Malayalam voice pack (e.g. "Lekha" or "Siri").\n\n` +
-          `Once downloaded, Malayalam speech synthesis will work perfectly.`
-        );
-      }
+      console.error("Speak failed", err);
+      setSpeakingKey(null);
+      alert(err || "Speech synthesis failed.");
     }
   };
 
@@ -166,7 +51,7 @@ export default function DictionaryView() {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    
+
     // Set glassmorphic drag visual feedback
     setGlassDragImage(e, `${name}`);
 
@@ -258,7 +143,7 @@ export default function DictionaryView() {
 
         {!loading && searched && (
           <div className="max-w-4xl mx-auto space-y-8 z-10 relative">
-            
+
             {/* Strong's Lexicon */}
             {lexiconResults.length > 0 && (
               <div>
@@ -289,11 +174,10 @@ export default function DictionaryView() {
                             const lang = isGreek ? "el" : "he";
                             handleSpeakText(r.lemma, lang, `${r.strongs_id}-${i}`);
                           }}
-                          className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 ${
-                            speakingKey === `${r.strongs_id}-${i}`
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 ${speakingKey === `${r.strongs_id}-${i}`
                               ? "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"
                               : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-300"
-                          }`}
+                            }`}
                           title="Pronounce original word"
                         >
                           <Volume2 size={14} className={speakingKey === `${r.strongs_id}-${i}` ? "animate-[bounce_1.5s_infinite]" : ""} />

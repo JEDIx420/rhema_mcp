@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-outfit), system-ui, -apple-system, sans-serif;
-  --font-prose: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-prose: Inter, "Noto Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --text-base: 1rem;
   --text-base--line-height: 1.625;
 }
@@ -183,4 +183,3 @@
   padding-bottom: 0.25rem !important;
   font-family: var(--font-sans), sans-serif !important;
 }
-

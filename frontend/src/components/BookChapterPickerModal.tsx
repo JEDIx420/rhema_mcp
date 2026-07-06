@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X, ChevronLeft } from "lucide-react";
+import { X, ChevronLeft, BookOpen, Languages, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
+import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
+import { ENGLISH_TRANSLATIONS } from "@/lib/englishTranslations";
 
 interface BookChapterPickerModalProps {
   isOpen: boolean;
@@ -20,6 +22,8 @@ export default function BookChapterPickerModal({
   selectedChapter,
   onSelect
 }: BookChapterPickerModalProps) {
+  const { activeEnglishTranslation, setActiveEnglishTranslation } = useEnglishTranslation();
+  const [activePanel, setActivePanel] = useState<"scripture" | "translation">("scripture");
   const [step, setStep] = useState<"book" | "chapter">("book");
   const [tempBook, setTempBook] = useState<string>(selectedBook);
 
@@ -56,7 +60,7 @@ export default function BookChapterPickerModal({
         {/* Header */}
         <div className="h-16 border-b border-slate-100 flex items-center justify-between px-6 shrink-0 bg-slate-50/50">
           <div className="flex items-center gap-2.5">
-            {step === "chapter" && (
+            {activePanel === "scripture" && step === "chapter" && (
               <button 
                 onClick={() => setStep("book")}
                 className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-500 cursor-pointer"
@@ -65,7 +69,11 @@ export default function BookChapterPickerModal({
               </button>
             )}
             <h3 className="text-base font-bold text-slate-800 font-sans" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>
-              {step === "book" ? "Select Scripture Book" : `Select Chapter in ${getBookName(tempBook)}`}
+              {activePanel === "translation"
+                ? "Choose English Translation"
+                : step === "book"
+                  ? "Select Scripture Book"
+                  : `Select Chapter in ${getBookName(tempBook)}`}
             </h3>
           </div>
           <button 
@@ -76,9 +84,61 @@ export default function BookChapterPickerModal({
           </button>
         </div>
 
+        <div className="border-b border-slate-100 bg-white px-6 pt-3">
+          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Scripture selection options">
+            <button
+              role="tab"
+              aria-selected={activePanel === "scripture"}
+              onClick={() => setActivePanel("scripture")}
+              className={`flex items-center justify-center gap-2 rounded-t-xl border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activePanel === "scripture" ? "border-blue-600 bg-blue-50/70 text-blue-700" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+            >
+              <BookOpen size={16} /> Book &amp; chapter
+            </button>
+            <button
+              role="tab"
+              aria-selected={activePanel === "translation"}
+              onClick={() => setActivePanel("translation")}
+              className={`flex items-center justify-center gap-2 rounded-t-xl border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activePanel === "translation" ? "border-blue-600 bg-blue-50/70 text-blue-700" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+            >
+              <Languages size={16} /> Translation
+            </button>
+          </div>
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 custom-modal-scroll">
-          {step === "book" ? (
+          {activePanel === "translation" ? (
+            <div className="space-y-3">
+              <div className="mb-5">
+                <h4 className="text-sm font-bold text-slate-800">English Bible editions</h4>
+                <p className="mt-1 text-sm text-slate-500">Choose the edition used throughout reading, search, maps, and study tools.</p>
+              </div>
+              {ENGLISH_TRANSLATIONS.map((translation) => {
+                const isActive = activeEnglishTranslation === translation.code;
+                return (
+                  <button
+                    key={translation.code}
+                    onClick={() => setActiveEnglishTranslation(translation.code)}
+                    className={`group flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-all ${isActive ? "border-blue-300 bg-blue-50 shadow-sm ring-1 ring-blue-100" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"}`}
+                  >
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold tracking-wide ${isActive ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700"}`}>
+                      {translation.shortLabel}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-base font-bold text-slate-900">{translation.label}</span>
+                      <span className="mt-0.5 block text-sm text-slate-500">{translation.description}</span>
+                    </span>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${isActive ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-transparent"}`}>
+                      <Check size={15} strokeWidth={3} />
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-500">
+                All available English editions are stored offline and are in the public domain.
+              </div>
+            </div>
+          ) : step === "book" ? (
             <div className="space-y-5">
               {/* Old Testament */}
               <div>

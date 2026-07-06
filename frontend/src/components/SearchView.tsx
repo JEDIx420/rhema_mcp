@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Search as SearchIcon, Loader2, Navigation, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import { searchScriptures } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import StudyPane from "./StudyPane";
 import { setGlassDragImage } from "@/lib/drag";
+import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 
 interface SearchResult {
   id: string;
@@ -22,6 +23,7 @@ interface SearchViewProps {
 }
 
 export default function SearchView({ onNavigate, onViewChange }: SearchViewProps) {
+  const { activeEnglishTranslation } = useEnglishTranslation();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +94,14 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     setTestament("ALL");
     triggerSearch(searchQuery, { book: "ALL", testament: "ALL", sort, page: 1 });
   };
+
+  useEffect(() => {
+    if (searched && query.trim()) {
+      void triggerSearch(query, { book, testament, sort, page });
+    }
+    // Translation changes intentionally rerun the active search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEnglishTranslation]);
 
   const handleFilterChange = (updates: { book?: string; testament?: string; sort?: string }) => {
     const nextBook = updates.book !== undefined ? updates.book : book;

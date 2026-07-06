@@ -6,6 +6,7 @@ import { fetchChapterMap, fetchGeographyRoutes, fetchRoutePoints } from "@/lib/a
 import { getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import { setGlassDragImage } from "@/lib/drag";
+import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 
 interface MapPlace {
   name: string;
@@ -43,6 +44,7 @@ interface MapViewProps {
 }
 
 export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
+  const { activeEnglishTranslation } = useEnglishTranslation();
   const [activeTab, setActiveTab] = useState<"chapter" | "routes">("chapter");
   const [places, setPlaces] = useState<MapPlace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,12 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
       });
   };
 
+  useEffect(() => {
+    if (selectedRouteId) handleRouteSelect(selectedRouteId);
+    // Translation changes refresh the selected route's verse excerpts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEnglishTranslation]);
+
   // 1. Fetch map places for current book & chapter
   useEffect(() => {
     let active = true;
@@ -105,7 +113,7 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
     return () => {
       active = false;
     };
-  }, [book, chapter]);
+  }, [book, chapter, activeEnglishTranslation]);
 
   // Fetch routes list when activeTab is "routes" and list is empty
   useEffect(() => {

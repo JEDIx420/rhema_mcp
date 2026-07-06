@@ -5,7 +5,7 @@ import io
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 def fetch_csv(url):
     print(f"Downloading {url}...")

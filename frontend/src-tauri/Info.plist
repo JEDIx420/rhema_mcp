@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>targum needs microphone access for speech-to-text recording of your study notes.</string>
+    <string>Rhelo needs microphone access for speech-to-text recording of your study notes.</string>
 </dict>
 </plist>

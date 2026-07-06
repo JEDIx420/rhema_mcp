@@ -1,5 +1,4 @@
 mcp>=1.28.1
 pyinstaller>=6.0.0
-gTTS>=2.5.0
 reportlab>=5.0.0
 SpeechRecognition>=3.17.0

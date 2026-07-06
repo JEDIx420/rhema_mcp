@@ -4,7 +4,7 @@ import urllib.request
 import re
 import sys
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 BOOK_MAP = {
     "Matt": "MAT", "Matthew": "MAT",

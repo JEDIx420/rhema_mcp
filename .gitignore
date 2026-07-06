@@ -4,15 +4,25 @@ __pycache__/
 .DS_Store
 backups/
 # Ignore the active SQLite database to prevent binary bloat and GitHub file size limit blocks
-rhema.db
-rhema_base_v3.db
-rhema_nt_complete.db
+rhelo.db
+rhelo.db-shm
+rhelo.db-wal
+targum.db
+targum.db-shm
+targum.db-wal
 
 # Javascript / Node / Next.js ignores
 node_modules/
 .next/
 dist/
+build/
+frontend/src-tauri/target/
 .env*.local
 
 # Generated study PDFs
 frontend/public/documents/
+
+# Local runtime and generated packaging assets
+backend.log
+server.spec
+ggml-*.bin

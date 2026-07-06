@@ -11,6 +11,8 @@ To run the MCP server locally within the Python virtual environment:
 ./.venv/bin/python3 server.py
 ```
 
+The application sidebar also contains an **MCP** page. It tests the local backend, shows the registered tools, and produces an absolute-path client configuration. In a web browser it manages connection settings only; browser security does not allow it to start or stop local processes. The Tauri build launches the bundled backend sidecar automatically.
+
 ### Server Dependencies
 Listed in `requirements.txt`:
 *   `mcp>=1.28.1` (includes `FastMCP`)
@@ -27,12 +29,14 @@ The server registers the following tools for the LLM client:
 *   **Arguments**:
     *   `query` (string, required): The search string or keyword.
     *   `book` (string, optional): A 3-letter uppercase book code (e.g. `GEN`, `MAT`) to restrict results.
+    *   `translation_code` (string, optional): `en_bsb` (default), `en_web`, or `en_kjv`.
 *   **Returns**: A newline-separated list of matches: `[VERSE_ID] Verse text`.
 
 ### 2. `get_verse_details`
 *   **Description**: Retrieve comprehensive exegesis details for a specific verse.
 *   **Arguments**:
     *   `verse_id` (string, required): The uppercase verse ID (e.g. `GEN.1.1`).
+    *   `translation_code` (string, optional): English edition returned in the details.
 *   **Returns**: All translations (English, Hebrew/Greek, Hindi, Telugu, Malayalam, Tamil), associated commentaries, geocoded places, chronological events, and top cross-references.
 
 ### 3. `search_dictionary_and_lexicon`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -25,6 +25,9 @@ import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
 import { setGlassDragImage } from "@/lib/drag";
+import { invokeSpeech } from "@/lib/speech";
+import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
+import { ENGLISH_TRANSLATIONS } from "@/lib/englishTranslations";
 
 interface TextToken {
   text: string;
@@ -51,70 +54,6 @@ const parseAlignmentText = (text: string): TextToken[] => {
     }
   }
   return tokens;
-};
-
-const stripAlignmentTags = (text: string): string => {
-  if (!text) return "";
-  return text
-    .replace(/<w[^>]*>(.*?)<\/w>/g, "$1")
-    .replace(/(\S+?)(?:\{[^{}]+\}|\[[^\[\]]+\]|\|[a-zA-Z0-9_#]+)/g, "$1")
-    .replace(/\{[^{}]+\}/g, "")
-    .replace(/\[[^\[\]]+\]/g, "")
-    .trim();
-};
-
-const invokeTauri = async (cmd: string, args: any) => {
-  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke(cmd, args);
-  }
-  
-  if (typeof window !== "undefined") {
-    if (cmd === "speak_text") {
-      const { text, lang } = args || {};
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        let mappedLang = (lang || "en").replace('_', '-');
-        if (mappedLang === "hi") mappedLang = "hi-IN";
-        else if (mappedLang === "te") mappedLang = "te-IN";
-        else if (mappedLang === "ta") mappedLang = "ta-IN";
-        else if (mappedLang === "ml") mappedLang = "ml-IN";
-        else if (mappedLang === "el") mappedLang = "el-GR";
-        else if (mappedLang === "he") mappedLang = "he-IL";
-        else if (mappedLang === "en") mappedLang = "en-US";
-        utterance.lang = mappedLang;
-
-        // Try to explicitly match a voice
-        const voices = window.speechSynthesis.getVoices();
-        const matchingVoice = voices.find(v => {
-          const vLang = v.lang.toLowerCase().replace('_', '-');
-          const target = mappedLang.toLowerCase();
-          return vLang === target || vLang.startsWith(target + "-") || target.startsWith(vLang + "-");
-        });
-
-        if (matchingVoice) {
-          utterance.voice = matchingVoice;
-          window.speechSynthesis.speak(utterance);
-          return;
-        }
-
-        // If it's a non-English language and no voice matches, throw to trigger online fallback
-        if (mappedLang !== "en-US") {
-          throw new Error(`No browser voice found for ${mappedLang}`);
-        }
-
-        window.speechSynthesis.speak(utterance);
-        return;
-      }
-    } else if (cmd === "stop_speech") {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        return;
-      }
-    }
-  }
-  throw new Error("Tauri IPC bridge not available in this environment");
 };
 
 const BIBLE_CHAPTER_COUNTS: Record<string, number> = {
@@ -174,7 +113,7 @@ interface VerseMenuInfo {
 
 function transliterateGreek(text: string): string {
   if (!text) return "";
-  let word = text.trim();
+  const word = text.trim();
 
   let hasRoughBreathing = false;
   const roughBreathingChars = [
@@ -195,7 +134,7 @@ function transliterateGreek(text: string): string {
     }
   }
 
-  let clean = normalized.replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const clean = normalized.replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   const replacements: [RegExp, string][] = [
     [/ου/g, "oo"],
@@ -376,7 +315,7 @@ function isWordMatch(engWord: string, originalLemma: string, isOT: boolean): boo
   const stopWords = new Set(["the", "and", "of", "to", "in", "a", "an", "is", "that", "it", "he", "she", "they", "we", "you", "his", "her", "their", "our", "your", "him", "them", "us", "me", "my", "was", "were", "be", "been", "have", "has", "had", "do", "does", "did", "for", "with", "as", "by", "on", "at", "from", "but", "or", "so", "if", "than", "then", "there", "their", "this", "these", "those", "is", "are", "was", "were"]);
   if (stopWords.has(cleanEng)) return false;
 
-  let translit = getTransliteration(originalLemma).toLowerCase().replace(/[^a-z]/g, "");
+  const translit = getTransliteration(originalLemma).toLowerCase().replace(/[^a-z]/g, "");
   if (!translit) return false;
 
   const map = isOT ? HEBREW_NAME_MAP : GREEK_NAME_MAP;
@@ -428,6 +367,9 @@ const TRANSLATIONS = [
   { key: "text_ta", label: "Tamil", enabled: false },
 ];
 
+const TTS_TRANSLATION_KEYS = new Set(["text_en", "text_original"]);
+const supportsTts = (translationKey: string) => TTS_TRANSLATION_KEYS.has(translationKey);
+
 interface ReadingDeskProps {
   book?: string;
   chapter?: number;
@@ -440,6 +382,9 @@ interface ReadingDeskProps {
 }
 
 export default function ReadingDesk(props: ReadingDeskProps) {
+  const { activeEnglishTranslation } = useEnglishTranslation();
+  const activeEnglishLabel = ENGLISH_TRANSLATIONS.find((item) => item.code === activeEnglishTranslation)?.label || "English";
+  const translationLabel = (translation: { key: string; label: string }) => translation.key === "text_en" ? activeEnglishLabel : translation.label;
   const [localBook, setLocalBook] = useState("GEN");
   const [localChapter, setLocalChapter] = useState(1);
 
@@ -461,7 +406,14 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const [enabledTranslations, setEnabledTranslations] = useState(
     TRANSLATIONS.map((t) => ({ ...t }))
   );
-  const activeTranslations = enabledTranslations.filter((t) => t.enabled);
+  const activeTranslations = useMemo(
+    () => enabledTranslations.filter((translation) => translation.enabled),
+    [enabledTranslations],
+  );
+  const speakableTranslations = useMemo(
+    () => activeTranslations.filter((translation) => supportsTts(translation.key)),
+    [activeTranslations],
+  );
 
   // Exegesis Drawer States
   const [selectedVerse, setSelectedVerse] = useState<VerseDetail | null>(null);
@@ -488,7 +440,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
-    invokeTauri("stop_speech", {}).catch(() => {});
+    invokeSpeech("stop_speech", {}).catch(() => { });
   };
 
   const handlePlayChapter = () => {
@@ -531,12 +483,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   // Sync language selection when active translations change
   useEffect(() => {
-    if (activeTranslations.length > 0) {
-      if (!activeTranslations.some(t => t.key === chapterPlayLanguage)) {
-        setChapterPlayLanguage(activeTranslations[0].key);
+    if (speakableTranslations.length > 0) {
+      if (!speakableTranslations.some(t => t.key === chapterPlayLanguage)) {
+        setChapterPlayLanguage(speakableTranslations[0].key);
       }
     }
-  }, [activeTranslations]);
+  }, [speakableTranslations, chapterPlayLanguage]);
 
   // Handle sequential play
   useEffect(() => {
@@ -562,7 +514,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           setSpeakingKey(`${v.id}-${chapterPlayLanguage}`);
 
           // Speak natively using Tauri command
-          await invokeTauri("speak_text", { text, lang: langCode });
+          await invokeSpeech("speak_text", { text, lang: langCode });
 
           if (!active) return;
 
@@ -591,7 +543,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       if (timerId) {
         clearTimeout(timerId);
       }
-      invokeTauri("stop_speech", {}).catch(() => {});
+      invokeSpeech("stop_speech", {}).catch(() => { });
     };
   }, [isPlayingChapter, currentPlayingIndex, verses, chapterPlayLanguage]);
 
@@ -618,16 +570,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       currentAudioRef.current = null;
     }
     // Stop any active speech first
-    await invokeTauri("stop_speech", {}).catch(() => {});
-
-    // Clean text by stripping any formatting/alignment tags before speaking
-    const cleanText = stripAlignmentTags(text);
+    await invokeSpeech("stop_speech", {}).catch(() => { });
 
     try {
       setSpeakingKey(key);
-      await invokeTauri("speak_text", { text: cleanText, lang: langCode });
-      
-      const duration = Math.max(2000, cleanText.length * 95 + 600);
+      await invokeSpeech("speak_text", { text, lang: langCode });
+
+      const duration = Math.max(2000, text.length * 95 + 600);
       if (singleSpeakTimerRef.current) {
         clearTimeout(singleSpeakTimerRef.current);
       }
@@ -635,49 +584,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
         setSpeakingKey(null);
       }, duration);
     } catch (err: any) {
-      console.warn("Local offline TTS failed, trying online fallback...", err);
-      
-      // Fallback to client-side Google Translate TTS online engine
-      try {
-        setSpeakingKey(key);
-        let gtLang = langCode;
-        if (gtLang === "he") gtLang = "iw"; // Google Translate uses 'iw' for Hebrew
-        
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${gtLang}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
-        const audio = new Audio(ttsUrl);
-        currentAudioRef.current = audio;
-        
-        const duration = Math.max(2000, cleanText.length * 95 + 600);
-        if (singleSpeakTimerRef.current) {
-          clearTimeout(singleSpeakTimerRef.current);
-        }
-        singleSpeakTimerRef.current = setTimeout(() => {
-          setSpeakingKey(null);
-        }, duration);
-
-        await audio.play();
-        audio.onended = () => {
-          setSpeakingKey(null);
-          currentAudioRef.current = null;
-        };
-        audio.onerror = () => {
-          setSpeakingKey(null);
-          currentAudioRef.current = null;
-          console.error("Online TTS playback failed");
-        };
-      } catch (fallbackErr) {
-        console.error("Google TTS fallback failed", fallbackErr);
-        setSpeakingKey(null);
-        alert(
-          `Speech Synthesis: Malayalam Voice Missing\n\n` +
-          `Reason: An offline Malayalam speech voice is not installed on your macOS system.\n\n` +
-          `To fix this and enable Malayalam speech (in both the browser and the desktop app):\n` +
-          `1. Open macOS "System Settings" -> "Accessibility" -> "Spoken Content".\n` +
-          `2. Click the "System Voice" dropdown and select "Manage Voices...".\n` +
-          `3. Search for "Malayalam" and click the download icon next to the Malayalam voice pack (e.g. "Lekha" or "Siri").\n\n` +
-          `Once downloaded, Malayalam speech synthesis will work perfectly.`
-        );
-      }
+      console.error("Speak failed", err);
+      setSpeakingKey(null);
+      alert(err || "Speech synthesis failed.");
     }
   };
 
@@ -685,7 +594,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     const activeTextMap = activeTranslations.map((t) => {
       const fieldKey = t.key as keyof Verse;
       const val = (verse[fieldKey] as string) || "";
-      return { label: t.label, text: val };
+      return { label: t.key === "text_en" ? activeEnglishLabel : t.label, text: val };
     });
 
     e.dataTransfer.setData("application/json-verses", JSON.stringify({ verseId, translations: activeTextMap }));
@@ -694,7 +603,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     e.dataTransfer.setData("text/plain", joinedText);
     e.dataTransfer.setData("application/verse-id", verseId);
     e.dataTransfer.effectAllowed = "copy";
-    
+
     // Set glassmorphic drag visual feedback
     setGlassDragImage(e, `${verseId}`);
 
@@ -763,7 +672,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       cancelled = true;
       controller.abort();
     };
-  }, [book, chapter, retryKey]);
+  }, [book, chapter, retryKey, activeEnglishTranslation]);
 
   useEffect(() => {
     if (props.selectedVerseId) {
@@ -826,7 +735,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const speakWord = async (word: string, isGreek: boolean) => {
     try {
       const langCode = isGreek ? "el-GR" : "he-IL";
-      await invokeTauri("speak_text", { text: word, lang: langCode });
+      await invokeSpeech("speak_text", { text: word, lang: langCode });
     } catch (err) {
       console.error("speakWord failed", err);
     }
@@ -1067,11 +976,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               data-alignment-id={cleanId}
               onMouseEnter={() => setHoveredAlignmentId(cleanId)}
               onMouseLeave={() => setHoveredAlignmentId(null)}
-              className={`inline-block px-0.5 transition-all duration-100 cursor-help ${
-                isHighlighted
+              className={`inline-block px-0.5 transition-all duration-100 cursor-help ${isHighlighted
                   ? "bg-blue-50/50 outline outline-1 outline-blue-200 rounded-sm text-blue-700 font-semibold"
                   : "text-inherit"
-              }`}
+                }`}
             >
               {token.text}
             </span>
@@ -1282,7 +1190,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                             }`}
                           style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                         >
-                          {t.label}
+                          {translationLabel(t)}
                         </span>
                         {t.enabled && (
                           <Check size={18} className="text-[var(--primary)] shrink-0" strokeWidth={2.5} />
@@ -1356,12 +1264,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               </h2>
 
               {/* Play Chapter Control Bar */}
-              <div className="flex items-center gap-3.5 mb-6 p-2 bg-slate-50 border border-slate-200/60 rounded-xl max-w-max select-none">
+              {speakableTranslations.length > 0 && <div className="flex items-center gap-3.5 mb-6 p-2 bg-slate-50 border border-slate-200/60 rounded-xl max-w-max select-none">
                 <button
                   onClick={handlePlayChapter}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-xs cursor-pointer ${isPlayingChapter
-                      ? "bg-red-500 hover:bg-red-600 text-white"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                    ? "bg-red-500 hover:bg-red-600 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
                     }`}
                 >
                   {isPlayingChapter ? (
@@ -1386,14 +1294,14 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     }}
                     className="text-xs border border-slate-200 bg-white rounded-md px-2.5 py-1.5 outline-none text-slate-800 font-sans cursor-pointer hover:border-slate-350 transition-colors"
                   >
-                    {activeTranslations.map((t) => (
+                    {speakableTranslations.map((t) => (
                       <option key={t.key} value={t.key}>
-                        {t.label}
+                        {translationLabel(t)}
                       </option>
                     ))}
                   </select>
                 </div>
-              </div>
+              </div>}
 
               {verses.map((v) => {
                 const isSelected = selectedVerse?.verse?.id === v.id;
@@ -1424,7 +1332,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                           <div className="flex items-start">
                             <div className="flex items-center mr-2 mt-0.5 shrink-0 gap-1 select-none">
                               {/* Small Play Button, visible on hover */}
-                              <button
+                              {supportsTts(t.key) && <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handlePlayChapterFromVerse(v.id, t.key);
@@ -1434,7 +1342,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                                 style={{ width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}
                               >
                                 <Play size={10} fill="currentColor" />
-                              </button>
+                              </button>}
 
                               <button
                                 onClick={(e) => handleVerseNumberClick(e, v)}
@@ -1454,7 +1362,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                               renderAlignmentText((v as any)[t.key] || "", v.id)
                             )}
                           </div>
-                          {((v as any)[t.key] || t.key === "text_en" || t.key === "text_original") && (
+                          {supportsTts(t.key) && ((v as any)[t.key] || t.key === "text_en" || t.key === "text_original") && (
                             <button
                               disabled={speakingKey !== null}
                               onClick={(e) => {
@@ -1471,10 +1379,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                                 handleSpeakText(text, langCode, `${v.id}-${t.key}`);
                               }}
                               className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors shrink-0 ${speakingKey === `${v.id}-${t.key}`
-                                  ? "text-blue-600 bg-blue-50 opacity-100! cursor-not-allowed"
-                                  : speakingKey !== null
-                                    ? "text-slate-200 opacity-20 cursor-not-allowed"
-                                    : "text-slate-400 hover:text-slate-700 cursor-pointer opacity-50 group-hover/col:opacity-100"
+                                ? "text-blue-600 bg-blue-50 opacity-100! cursor-not-allowed"
+                                : speakingKey !== null
+                                  ? "text-slate-200 opacity-20 cursor-not-allowed"
+                                  : "text-slate-400 hover:text-slate-700 cursor-pointer opacity-50 group-hover/col:opacity-100"
                                 }`}
                               title="Listen to translation"
                             >

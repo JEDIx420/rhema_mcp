@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mcp-server:
     build:
@@ -7,11 +5,11 @@ services:
       dockerfile: Dockerfile.server
     container_name: rhelo-mcp-server
     volumes:
-      - ./rhelo.db:/app/rhelo.db
+      - ./rhelo.db:/data/rhelo.db
     ports:
-      - "8000:8000"
+      - "5050:5050"
     environment:
-      - PORT=8000
+      - RHELO_API_PORT=5050
     restart: unless-stopped
 
   frontend:
@@ -19,9 +17,7 @@ services:
       context: ./frontend
     container_name: rhelo-frontend
     ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_MCP_URL=http://localhost:8000/sse
+      - "3000:80"
     depends_on:
       - mcp-server
     restart: unless-stopped

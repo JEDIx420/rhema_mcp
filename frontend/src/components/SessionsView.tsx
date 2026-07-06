@@ -5,7 +5,6 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Mark } from "@tiptap/core";
 import { TextStyle } from "@tiptap/extension-text-style";
-import { Underline } from "@tiptap/extension-underline";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { 
   Notebook, 
@@ -40,6 +39,7 @@ import {
   searchSessions, 
   generateSessionPDF 
 } from "@/lib/api";
+import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
 
 interface Session {
   session_id: string;
@@ -90,9 +90,9 @@ export default function SessionsView() {
 
   // Initialize TipTap
   const editor = useEditor({
+    immediatelyRender: true,
     extensions: [
       StarterKit,
-      Underline,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -320,9 +320,7 @@ export default function SessionsView() {
 
   const handleDropVerse = (e: React.DragEvent) => {
     e.preventDefault();
-    const jsonVerses = e.dataTransfer.getData("application/json-verses");
-    const verseId = e.dataTransfer.getData("application/verse-id");
-    const verseText = e.dataTransfer.getData("text/plain");
+    const versePayload = readVerseDragPayload(e.dataTransfer);
     
     if (editor) {
       // Ensure date header exists
@@ -335,30 +333,8 @@ export default function SessionsView() {
         editor.commands.setContent(cleanHtml + heading);
       }
 
-      if (jsonVerses) {
-        try {
-          const parsed = JSON.parse(jsonVerses);
-          // For each active translation, append as a separate blockquote
-          if (parsed.translations && Array.isArray(parsed.translations)) {
-            parsed.translations.forEach((item: { label: string; text: string }) => {
-              editor.commands.insertContent(
-                `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${parsed.verseId} (${item.label})</strong>: &ldquo;${item.text}&rdquo;</blockquote><p></p>`
-              );
-            });
-            triggerAutoSave(editor.getHTML());
-            return;
-          }
-        } catch (err) {
-          console.error("Failed to parse json-verses", err);
-        }
-      }
-
-      if (verseId && verseText) {
-        // Append beautifully formatted Quote Block
-        editor.commands.insertContent(
-          `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`
-        );
-        // Trigger autosave
+      if (versePayload) {
+        editor.commands.insertContent(renderVerseDropHtml(versePayload));
         triggerAutoSave(editor.getHTML());
       }
     }

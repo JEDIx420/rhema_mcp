@@ -3,7 +3,7 @@ import json
 import urllib.request
 import sys
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 def ingest_strongs():
     url = "https://raw.githubusercontent.com/mormon-documentation-project/strongs/master/strongs.json"

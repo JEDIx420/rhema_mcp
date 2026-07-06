@@ -5,7 +5,7 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 BOOK_NORMALIZER = {
     "Genesis": "GEN", "Gen.": "GEN", "Gen": "GEN",

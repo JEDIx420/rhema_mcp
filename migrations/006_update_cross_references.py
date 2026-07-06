@@ -4,9 +4,9 @@ import zipfile
 import io
 import sys
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
-OPENBIBLE_TO_RHEMA = {
+OPENBIBLE_TO_RHELO = {
     "Gen": "GEN", "Exod": "EXO", "Lev": "LEV", "Num": "NUM", "Deut": "DEU",
     "Josh": "JOS", "Judg": "JDG", "Ruth": "RUT", "1Sam": "1SA", "2Sam": "2SA",
     "1Kgs": "1KI", "2Kgs": "2KI", "1Chr": "1CH", "2Chr": "2CH", "Ezra": "EZR",
@@ -30,7 +30,7 @@ def parse_verse_id(ref_str):
         b_name = parts[0]
         chap = parts[1]
         v_num = parts[2]
-        mapped_book = OPENBIBLE_TO_RHEMA.get(b_name)
+        mapped_book = OPENBIBLE_TO_RHELO.get(b_name)
         if mapped_book:
             return f"{mapped_book}.{chap}.{v_num}"
     return None

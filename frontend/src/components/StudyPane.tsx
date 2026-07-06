@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
 import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
+import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 import { getBookName } from "@/lib/books";
 import { setGlassDragImage } from "@/lib/drag";
 
@@ -169,6 +170,7 @@ function getTransliteration(text: string): string {
 }
 
 export default function StudyPane({ verseId, onVerseClick, initialTab, initialLexiconWord }: StudyPaneProps) {
+  const { activeEnglishTranslation } = useEnglishTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verseData, setVerseData] = useState<VerseDetail | null>(null);
@@ -419,7 +421,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     return () => {
       cancelled = true;
     };
-  }, [verseId, initialTab, initialLexiconWord]);
+  }, [verseId, initialTab, initialLexiconWord, activeEnglishTranslation]);
 
   const handleLexiconWordSelect = (word: string) => {
     setActiveLexiconWord(word);

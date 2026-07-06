@@ -4,7 +4,7 @@ import urllib.request
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
 def setup_schema(cursor):
     print("Setting up commentaries table...")

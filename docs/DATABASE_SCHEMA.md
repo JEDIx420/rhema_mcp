@@ -160,10 +160,12 @@ erDiagram
 
 ## ⚡ Virtual FTS5 tables (Lightning-Fast Search)
 
-Five virtual FTS5 indices exist to perform instant lookups:
+Six virtual FTS5 indices exist to perform instant lookups:
 1.  **`search_en`**: Indexes `id`, `book`, `chapter`, `verse`, and `text_en` for scriptures.
 2.  **`dictionary_fts`**: Indexes `slug`, `name`, and `definition_text` combining Easton's and Smith's Bible dictionaries.
 3.  **`naves_fts`**: Indexes `subject` and `entry` for Nave's Topical Index.
 4.  **`lexicon_fts`**: Indexes `strongs_id`, `lemma`, and `definition` for Strong's lexicon.
 5.  **`sessions_fts`**: Indexes `session_id`, `title`, and `content` for active saved sessions.
+6.  **`search_english_translations`**: Indexes BSB, WEB, and KJV text independently while retaining canonical verse metadata for filtered search.
 
+English editions use `en_bsb`, `en_web`, and `en_kjv`. API reads join the requested code against `verse_translations` and fall back to KJV when a modern edition omits a traditional verse number. The `verses` compatibility view continues to expose the legacy `en` text as `text_en`.

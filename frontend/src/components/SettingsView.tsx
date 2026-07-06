@@ -171,7 +171,7 @@ export default function SettingsView() {
           <Info size={20} className="text-slate-500 shrink-0 mt-0.5" />
           <div className="space-y-1.5 text-sm text-slate-650 leading-relaxed font-sans">
             <span className="font-bold text-slate-850 block text-base">Attribution & Licenses Notice</span>
-             All database layers in the rhelo study engine are loaded from public domain and open-source data assets: KJV English, MorphGNT / BYZ Greek, FreeBiblesIndia Indic texts (USFM), OpenBible.info cross-reference matrix, Lifegems chronology timeline database, and Stephen Brady genealogical index profiles.
+             All database layers in the Rhelo study engine are loaded from public-domain and open-source data assets, including BSB, WEB, KJV English, MorphGNT / BYZ Greek, FreeBiblesIndia Indic texts, OpenBible.info cross-references, Lifegems chronology data, and Brady Stephenson&apos;s genealogical datasets.
           </div>
         </div>
       </div>

@@ -2,18 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
-import ReadingDesk from "@/components/ReadingDesk";
-import SearchView from "@/components/SearchView";
-import DictionaryView from "@/components/DictionaryView";
-import MapView from "@/components/MapView";
-import TimelineView from "@/components/TimelineView";
-import GenealogyView from "@/components/GenealogyView";
-import SettingsView from "@/components/SettingsView";
-import SessionsView from "@/components/SessionsView";
 import CommandCenter from "@/components/CommandCenter";
+import AppViewRouter from "@/components/AppViewRouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Save } from "lucide-react";
 import { fetchSessions, updateSession } from "@/lib/api";
+import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
 
 const invokeTauri = async (cmd: string, args: any) => {
   if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
@@ -297,72 +291,6 @@ export default function Home() {
     }
   };
 
-  const renderView = () => {
-    switch (activeView) {
-      case "read":
-        return (
-          <ReadingDesk
-            book={book}
-            chapter={chapter}
-            setBook={setBook}
-            setChapter={setChapter}
-            selectedVerseId={selectedVerseId}
-            setSelectedVerseId={setSelectedVerseId}
-            onViewChange={setActiveView}
-          />
-        );
-      case "search":
-        return (
-          <SearchView
-            onNavigate={handleNavigate}
-            onViewChange={setActiveView}
-          />
-        );
-      case "dictionary":
-        return <DictionaryView />;
-      case "map":
-        return (
-          <MapView
-            book={book}
-            chapter={chapter}
-            onNavigate={handleNavigate}
-          />
-        );
-      case "timeline":
-        return (
-          <TimelineView
-            onNavigate={handleNavigate}
-            onViewChange={setActiveView}
-          />
-        );
-      case "people":
-        return (
-          <GenealogyView
-            selectedPersonId={selectedPersonId}
-            onSelectPerson={setSelectedPersonId}
-            onNavigate={handleNavigate}
-            onViewChange={setActiveView}
-          />
-        );
-      case "sessions":
-        return <SessionsView />;
-      case "settings":
-        return <SettingsView />;
-      default:
-        return (
-          <ReadingDesk
-            book={book}
-            chapter={chapter}
-            setBook={setBook}
-            setChapter={setChapter}
-            selectedVerseId={selectedVerseId}
-            setSelectedVerseId={setSelectedVerseId}
-            onViewChange={setActiveView}
-          />
-        );
-    }
-  };
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 relative">
       {/* CommandCenter Keyboard-Activated Command Launcher */}
@@ -386,7 +314,19 @@ export default function Home() {
             transition={{ duration: 0.2 }}
             className="h-full"
           >
-            {renderView()}
+            <AppViewRouter
+              activeView={activeView}
+              book={book}
+              chapter={chapter}
+              selectedVerseId={selectedVerseId}
+              selectedPersonId={selectedPersonId}
+              setBook={setBook}
+              setChapter={setChapter}
+              setSelectedVerseId={setSelectedVerseId}
+              setSelectedPersonId={setSelectedPersonId}
+              setActiveView={setActiveView}
+              onNavigate={handleNavigate}
+            />
           </motion.div>
         </AnimatePresence>
       </main>
@@ -433,17 +373,15 @@ export default function Home() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
-              const verseId = e.dataTransfer.getData("application/verse-id");
-              const verseText = e.dataTransfer.getData("text/plain");
-              if (verseId && verseText) {
+              const versePayload = readVerseDragPayload(e.dataTransfer);
+              if (versePayload) {
                 try {
                   const targetSessionId = activeSessionId;
                   if (targetSessionId) {
                     const targetSession = studySessionsList.find(s => s.session_id === targetSessionId);
                     if (targetSession) {
                       const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
-                      const updatedContent = contentWithDate + 
-                        `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
+                      const updatedContent = contentWithDate + renderVerseDropHtml(versePayload);
                       await updateSession(targetSession.session_id, targetSession.title, updatedContent);
                       
                       window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
@@ -455,8 +393,7 @@ export default function Home() {
                     if (sessions.length > 0) {
                       const latest = sessions[0];
                       const contentWithDate = addDateHeaderIfNeeded(latest.content || "");
-                      const updatedContent = contentWithDate + 
-                        `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
+                      const updatedContent = contentWithDate + renderVerseDropHtml(versePayload);
                       await updateSession(latest.session_id, latest.title, updatedContent);
                       
                       window.dispatchEvent(new CustomEvent("rhelo-session-updated"));

@@ -3,9 +3,9 @@ import json
 import urllib.request
 import sys
 
-DB_PATH = "rhema.db"
+DB_PATH = "rhelo.db"
 
-OSIS_TO_RHEMA = {
+OSIS_TO_RHELO = {
     "Matt": "MAT", "Mark": "MRK", "Luke": "LUK", "John": "JHN",
     "Acts": "ACT", "Rom": "ROM", "1Cor": "1CO", "2Cor": "2CO",
     "Gal": "GAL", "Eph": "EPH", "Phil": "PHP", "Col": "COL",
@@ -131,11 +131,11 @@ def ingest_ancient_places(cursor, valid_verse_ids):
                     if osis and "." in osis:
                         parts = osis.split(".")
                         book_osis = parts[0]
-                        if book_osis in OSIS_TO_RHEMA:
-                            rhema_book = OSIS_TO_RHEMA[book_osis]
+                        if book_osis in OSIS_TO_RHELO:
+                            rhelo_book = OSIS_TO_RHELO[book_osis]
                             chap = parts[1]
                             verse_num = parts[2]
-                            verse_id = f"{rhema_book}.{chap}.{verse_num}"
+                            verse_id = f"{rhelo_book}.{chap}.{verse_num}"
                             
                             if verse_id in valid_verse_ids:
                                 cursor.execute("""

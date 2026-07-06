@@ -1,15 +1,15 @@
-from mcp.server.fastmcp import FastMCP
 import sqlite3
 import json
 import os
 
-mcp = FastMCP("Rhelo Study Engine")
-DB_PATH = os.environ.get("RHELO_DB_PATH", os.environ.get("TARGUM_DB_PATH", os.path.join(os.path.dirname(__file__), "rhelo.db")))
+from rhelo_backend.config import get_settings
+from rhelo_backend.database import connect as get_db_connection
+from rhelo_backend.mcp_server import TOOL_NAMES, mcp
+from rhelo_backend.http_server import serve
+from rhelo_backend.translations import ENGLISH_TRANSLATIONS, normalize_translation_code
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+DB_PATH = str(get_settings().database_path)
+
 
 def compile_html_to_pdf(html_content: str, title: str, output_path: str):
     from reportlab.lib.pagesizes import letter
@@ -138,7 +138,6 @@ def compile_html_to_pdf(html_content: str, title: str, output_path: str):
 
     doc.build(story)
 
-@mcp.tool()
 def search_scriptures(query: str, book: str = None) -> str:
     """
     Search the English Bible text using full-text search (FTS5).
@@ -175,7 +174,6 @@ def search_scriptures(query: str, book: str = None) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def get_verse_details(verse_id: str) -> str:
     """
     Retrieve comprehensive details for a specific verse ID (e.g. 'GEN.1.1' or 'MAT.1.1').
@@ -262,7 +260,6 @@ def get_verse_details(verse_id: str) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def search_dictionary_and_lexicon(query: str) -> str:
     """
     Search Easton's/Smith's Bible Dictionaries and Strong's Concordance Greek/Hebrew lexicon.
@@ -314,7 +311,6 @@ def search_dictionary_and_lexicon(query: str) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def search_topics(query: str) -> str:
     """
     Search subjects and entries in Nave's Topical Index.
@@ -346,7 +342,6 @@ def search_topics(query: str) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def get_biography(person_id: str) -> str:
     """
     Retrieve biographical profile, unique attributes, and family relationships for a person ID (e.g. 'Adam_1', 'David_1').
@@ -403,7 +398,6 @@ def get_biography(person_id: str) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def list_geography_routes() -> str:
     """
     Retrieve a list of available historical biblical routes/journeys (e.g. Abraham's journey, Exodus, Paul's missionary trips).
@@ -426,7 +420,6 @@ def list_geography_routes() -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def get_route_points(route_id: str) -> str:
     """
     Retrieve the ordered list of coordinates, place names, and scripture references for a specific route ID.
@@ -462,7 +455,6 @@ def get_route_points(route_id: str) -> str:
     finally:
         conn.close()
 
-@mcp.tool()
 def get_chapter_map_data(book: str, chapter: int) -> str:
     """
     Retrieve geocoded coordinates and place names mentioned in a specific book and chapter (e.g. book='GEN', chapter=12).
@@ -496,7 +488,7 @@ def get_chapter_map_data(book: str, chapter: int) -> str:
 
 # --- Built-in HTTP JSON API Server for Next.js Frontend ---
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import unicodedata
 
@@ -796,6 +788,7 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     return
 
         query_params = parse_qs(parsed_url.query)
+        translation_code = normalize_translation_code(query_params.get("translation", [None])[0])
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -808,10 +801,13 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                 chapter = query_params.get("chapter", [None])[0]
                 if book and chapter:
                     cursor.execute("""
-                        SELECT * FROM verses 
-                        WHERE book = ? AND chapter = ?
+                        SELECT v.*, COALESCE(et.text, v.text_en) AS active_text_en
+                        FROM verses v
+                        LEFT JOIN verse_translations et
+                          ON et.verse_id = v.id AND et.translation_code = ?
+                        WHERE v.book = ? AND v.chapter = ?
                         ORDER BY verse
-                    """, (book.upper(), int(chapter)))
+                    """, (translation_code, book.upper(), int(chapter)))
                     rows = cursor.fetchall()
                     
                     verses_list = []
@@ -837,7 +833,7 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         
                         verses_list.append({
                             "id": r['id'], "book": r['book'], "chapter": r['chapter'], "verse": r['verse'],
-                            "text_en": r['text_en'], "text_original": r['text_original'],
+                            "text_en": r['active_text_en'], "text_original": r['text_original'],
                             "text_hi": r['text_hi'], "text_te": r['text_te'],
                             "text_ml": r['text_ml'], "text_ta": r['text_ta'],
                             "cross_references_count": cross_ref_count,
@@ -845,7 +841,7 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                             "commentaries": commentaries,
                             "morphology": morph
                         })
-                    response_data = {"verses": verses_list}
+                    response_data = {"verses": verses_list, "translation_code": translation_code}
                     status_code = 200
 
             elif path == "/api/search":
@@ -858,10 +854,10 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
 
                 if q:
                     cursor.execute("""
-                        SELECT id, book, chapter, verse, text_en, rank 
-                        FROM search_en 
-                        WHERE text_en MATCH ?
-                    """, (q,))
+                        SELECT id, book, chapter, verse, text AS text_en, rank
+                        FROM search_english_translations
+                        WHERE search_english_translations MATCH ? AND translation_code = ?
+                    """, (q, translation_code))
                     rows = [dict(r) for r in cursor.fetchall()]
 
                     # Apply filters
@@ -900,17 +896,25 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         "page": page,
                         "limit": limit,
                         "matching_books": matching_books,
-                        "matching_testaments": matching_testaments
+                        "matching_testaments": matching_testaments,
+                        "translation_code": translation_code,
                     }
                     status_code = 200
 
             elif path == "/api/verse":
                 verse_id = query_params.get("id", [""])[0]
                 if verse_id:
-                    cursor.execute("SELECT * FROM verses WHERE id = ?", (verse_id.upper(),))
+                    cursor.execute("""
+                        SELECT v.*, COALESCE(et.text, v.text_en) AS active_text_en
+                        FROM verses v
+                        LEFT JOIN verse_translations et
+                          ON et.verse_id = v.id AND et.translation_code = ?
+                        WHERE v.id = ?
+                    """, (translation_code, verse_id.upper()))
                     row = cursor.fetchone()
                     if row:
                         verse_dict = dict(row)
+                        verse_dict['text_en'] = verse_dict.pop('active_text_en')
                         try:
                             verse_dict['morphology'] = json.loads(verse_dict['morphology']) if verse_dict['morphology'] else []
                         except:
@@ -940,12 +944,14 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         
                         # Get cross-references
                         cursor.execute("""
-                            SELECT cr.to_verse, cr.votes, v.text_en AS text_en
+                            SELECT cr.to_verse, cr.votes, COALESCE(et.text, v.text_en) AS text_en
                             FROM cross_references cr
                             LEFT JOIN verses v ON cr.to_verse = v.id
+                            LEFT JOIN verse_translations et
+                              ON et.verse_id = v.id AND et.translation_code = ?
                             WHERE cr.from_verse = ? 
                             ORDER BY cr.votes DESC LIMIT 15
-                        """, (verse_id.upper(),))
+                        """, (translation_code, verse_id.upper()))
                         cross_refs = [dict(cr) for cr in cursor.fetchall()]
                         
                         response_data = {
@@ -953,7 +959,8 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                             "commentaries": comms,
                             "places": places,
                             "events": events,
-                            "cross_references": cross_refs
+                            "cross_references": cross_refs,
+                            "translation_code": translation_code,
                         }
                         status_code = 200
 
@@ -1001,19 +1008,25 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                 results = []
                 if lemma:
                     cursor.execute("""
-                        SELECT id, book, chapter, verse, text_en, text_original
-                        FROM verses 
-                        WHERE morphology LIKE ? 
+                        SELECT v.id, v.book, v.chapter, v.verse,
+                               COALESCE(et.text, v.text_en) AS text_en, v.text_original
+                        FROM verses v
+                        LEFT JOIN verse_translations et
+                          ON et.verse_id = v.id AND et.translation_code = ?
+                        WHERE v.morphology LIKE ?
                         LIMIT 20
-                    """, (f'%"lemma": "{lemma}"%',))
+                    """, (translation_code, f'%"lemma": "{lemma}"%'))
                     rows = cursor.fetchall()
                     if not rows:
                         cursor.execute("""
-                            SELECT id, book, chapter, verse, text_en, text_original
-                            FROM verses 
-                            WHERE text_original LIKE ? 
+                            SELECT v.id, v.book, v.chapter, v.verse,
+                                   COALESCE(et.text, v.text_en) AS text_en, v.text_original
+                            FROM verses v
+                            LEFT JOIN verse_translations et
+                              ON et.verse_id = v.id AND et.translation_code = ?
+                            WHERE v.text_original LIKE ?
                             LIMIT 20
-                        """, (f'%{lemma}%',))
+                        """, (translation_code, f'%{lemma}%'))
                         rows = cursor.fetchall()
                     results = [dict(r) for r in rows]
                 response_data = {"occurrences": results}
@@ -1163,7 +1176,12 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
 
                     # Decorate place items with text content, original terms, and etymology details
                     for row in rows:
-                        cursor.execute("SELECT text_en, text_original FROM verses WHERE id = ?", (row["verse_id"],))
+                        cursor.execute("""
+                            SELECT COALESCE(et.text, v.text_en), v.text_original
+                            FROM verses v LEFT JOIN verse_translations et
+                              ON et.verse_id = v.id AND et.translation_code = ?
+                            WHERE v.id = ?
+                        """, (translation_code, row["verse_id"]))
                         v_row = cursor.fetchone()
                         if v_row:
                             row["text_en"] = v_row[0]
@@ -1215,7 +1233,12 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     # Fetch verse details for each point
                     for r in rows:
                         if r["associated_verse_id"]:
-                            cursor.execute("SELECT text_en, text_original FROM verses WHERE id = ?", (r["associated_verse_id"].upper(),))
+                            cursor.execute("""
+                                SELECT COALESCE(et.text, v.text_en), v.text_original
+                                FROM verses v LEFT JOIN verse_translations et
+                                  ON et.verse_id = v.id AND et.translation_code = ?
+                                WHERE v.id = ?
+                            """, (translation_code, r["associated_verse_id"].upper()))
                             v_row = cursor.fetchone()
                             if v_row:
                                 r["text_en"] = v_row[0]
@@ -1254,6 +1277,46 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         "events": events_count,
                         "people": people_count
                     }
+                }
+                status_code = 200
+
+            elif path == "/api/translations":
+                response_data = {
+                    "default": "en_bsb",
+                    "translations": list(ENGLISH_TRANSLATIONS),
+                }
+                status_code = 200
+
+            elif path == "/api/mcp/status":
+                response_data = {
+                    "status": "connected",
+                    "server": "rhelo",
+                    "transport": "stdio",
+                    "api_url": f"http://127.0.0.1:{get_settings().api_port}",
+                    "database": os.path.basename(DB_PATH),
+                    "tools": list(TOOL_NAMES),
+                    "capabilities": {
+                        "web": ["status", "connection_test", "configuration_copy"],
+                        "tauri": ["status", "connection_test", "configuration_copy", "bundled_sidecar"],
+                    },
+                }
+                status_code = 200
+
+            elif path == "/api/mcp/config":
+                executable = os.path.abspath(os.environ.get("RHELO_PYTHON_PATH", os.sys.executable))
+                entrypoint = os.path.abspath(__file__)
+                launch_args = [] if getattr(os.sys, "frozen", False) else [entrypoint]
+                response_data = {
+                    "server_name": "rhelo",
+                    "configuration": {
+                        "mcpServers": {
+                            "rhelo": {
+                                "command": executable,
+                                "args": launch_args,
+                                "env": {"RHELO_DB_PATH": DB_PATH, "RHELO_MODE": "mcp"},
+                            }
+                        }
+                    },
                 }
                 status_code = 200
 
@@ -1304,23 +1367,22 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response_data).encode('utf-8'))
 
 def start_http_server():
-    server = HTTPServer(('0.0.0.0', 5050), JSONAPIHandler)
-    print("Built-in HTTP JSON API Server running on port 5050...")
-    server.serve_forever()
+    serve(JSONAPIHandler)
 
 if __name__ == "__main__":
     # Cache lexicon lemmas first
     build_lexicon_lookup()
 
     import sys
-    # If stdin is not a TTY (running in background, redirect, or daemon), run HTTP server in the main thread
-    if not sys.stdin.isatty():
-        print("Non-interactive mode detected. Running HTTP JSON API Server on main thread...")
+    mode = os.environ.get("RHELO_MODE", "auto").lower()
+    if mode == "http":
+        print("Running Rhelo in HTTP API mode...")
         start_http_server()
-    else:
-        print("Interactive mode detected. Running HTTP JSON API Server on thread and MCP stdio on main thread...")
+    elif mode == "both" or (mode == "auto" and sys.stdin.isatty()):
+        print("Running Rhelo in combined HTTP and MCP development mode...")
         api_thread = threading.Thread(target=start_http_server, daemon=True)
         api_thread.start()
-        # Start the MCP server (blocks on stdio)
         mcp.run()
-
+    else:
+        print("Running Rhelo in MCP stdio mode...", file=sys.stderr)
+        mcp.run()
