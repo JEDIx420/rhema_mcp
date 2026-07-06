@@ -148,6 +148,13 @@ pub fn run() {
 
       // 1. Initialize native TTS and manage it in Tauri State
       if let Ok(tts_instance) = Tts::default() {
+          if let Ok(voices) = tts_instance.voices() {
+              let mut log_content = String::from("=== System TTS Voices ===\n");
+              for v in &voices {
+                  log_content.push_str(&format!("Name: {}, Language: {}\n", v.name(), v.language()));
+              }
+              let _ = std::fs::write("../../tts_voices.log", log_content);
+          }
           app.manage(Mutex::new(tts_instance));
       } else {
           // Fallback if system speech init fails

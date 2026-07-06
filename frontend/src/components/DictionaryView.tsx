@@ -18,7 +18,15 @@ const invokeTauri = async (cmd: string, args: any) => {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = (lang || "en").replace('_', '-');
+        let mappedLang = (lang || "en").replace('_', '-');
+        if (mappedLang === "hi") mappedLang = "hi-IN";
+        else if (mappedLang === "te") mappedLang = "te-IN";
+        else if (mappedLang === "ta") mappedLang = "ta-IN";
+        else if (mappedLang === "ml") mappedLang = "ml-IN";
+        else if (mappedLang === "el") mappedLang = "el-GR";
+        else if (mappedLang === "he") mappedLang = "he-IL";
+        else if (mappedLang === "en") mappedLang = "en-US";
+        utterance.lang = mappedLang;
         window.speechSynthesis.speak(utterance);
         return;
       }
