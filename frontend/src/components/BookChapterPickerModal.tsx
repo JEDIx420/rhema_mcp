@@ -68,7 +68,7 @@ export default function BookChapterPickerModal({
                 <ChevronLeft size={16} />
               </button>
             )}
-            <h3 className="text-base font-bold text-slate-800 font-sans" style={{ fontFamily: "var(--font-outfit), sans-serif" }}>
+            <h3 className="text-base font-bold text-slate-800 font-sans">
               {activePanel === "translation"
                 ? "Choose English Translation"
                 : step === "book"
@@ -155,7 +155,6 @@ export default function BookChapterPickerModal({
                           ? "bg-blue-50 text-blue-600 border-blue-200 shadow-xs" 
                           : "bg-white text-slate-600 border-slate-200/80 hover:border-blue-200 hover:bg-slate-50/50"
                       }`}
-                      style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                     >
                       {b.name}
                     </button>
@@ -178,7 +177,6 @@ export default function BookChapterPickerModal({
                           ? "bg-blue-50 text-blue-600 border-blue-200 shadow-xs" 
                           : "bg-white text-slate-600 border-slate-200/80 hover:border-blue-200 hover:bg-slate-50/50"
                       }`}
-                      style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                     >
                       {b.name}
                     </button>
@@ -197,7 +195,6 @@ export default function BookChapterPickerModal({
                       ? "bg-blue-50 text-blue-600 border-blue-200 shadow-xs" 
                       : "bg-white text-slate-600 border-slate-200/80 hover:border-blue-200 hover:bg-slate-50/50"
                   }`}
-                  style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                 >
                   {ch}
                 </button>

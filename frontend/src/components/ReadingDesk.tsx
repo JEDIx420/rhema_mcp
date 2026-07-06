@@ -20,7 +20,7 @@ import {
   Play,
   Pause,
 } from "lucide-react";
-import { fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
+import { createSession, fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
@@ -607,7 +607,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     // Set glassmorphic drag visual feedback
     setGlassDragImage(e, `${verseId}`);
 
-    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId, verseText: joinedText } });
+    const dragEvent = new CustomEvent("rhelo-drag-start", {
+      detail: {
+        verseId,
+        verseText: joinedText,
+        payload: { verseId, translations: activeTextMap },
+      },
+    });
     window.dispatchEvent(dragEvent);
   };
 
@@ -663,7 +669,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
         if (!cancelled) {
           setFetchState({
             status: "error",
-            message: `Failed to load ${getBookName(book)} ${chapter}. Is the backend server running on port 5050?`,
+            message: `Rhelo could not finish preparing ${getBookName(book)} ${chapter}. Please retry.`,
           });
         }
       });
@@ -950,7 +956,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       return (
         <span
           className="leading-relaxed text-sm font-medium text-slate-800"
-          style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-inter), sans-serif" }}
+          style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-prose), sans-serif" }}
         >
           {text}
         </span>
@@ -960,7 +966,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     return (
       <span
         className="leading-relaxed text-sm font-medium text-slate-805"
-        style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-inter), sans-serif" }}
+        style={{ fontSize: `${textSize}px`, fontFamily: "var(--font-prose), sans-serif" }}
       >
         {tokens.map((token, idx) => {
           if (token.alignmentId === null) {
@@ -1135,12 +1141,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           <button
             onClick={async () => {
               try {
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-                const res = await fetch(`${apiBase}/api/sessions/create`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ title: "New Reading Session", content: "" })
-                }).then(r => r.json());
+                const res = await createSession("New Reading Session", "");
 
                 if (res.session_id) {
                   window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
@@ -1148,11 +1149,11 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                 }
               } catch (err) {
                 console.error(err);
+                alert(`The study session could not be created: ${err instanceof Error ? err.message : String(err)}`);
               }
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-all font-sans shadow-sm"
             title="Create new study session"
-            style={{ fontFamily: "var(--font-outfit), sans-serif" }}
           >
             <Plus size={15} className="text-blue-600" />
             <span>Session</span>
@@ -1163,7 +1164,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             <button
               onClick={() => setShowLangDropdown(!showLangDropdown)}
               className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-colors shadow-sm font-sans"
-              style={{ fontFamily: "var(--font-outfit), sans-serif" }}
             >
               <span>Languages</span>
               <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${showLangDropdown ? "rotate-180" : ""}`} />
@@ -1188,7 +1188,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                         <span
                           className={`text-sm transition-colors ${t.enabled ? "text-[var(--primary)] font-semibold" : "text-slate-700"
                             }`}
-                          style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                         >
                           {translationLabel(t)}
                         </span>
@@ -1258,7 +1257,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             <div className="max-w-5xl mx-auto space-y-1">
               <h2
                 className="text-2xl font-bold mb-6"
-                style={{ fontFamily: "var(--font-outfit), sans-serif", color: "var(--text-primary)" }}
+                style={{ color: "var(--text-primary)" }}
               >
                 {getBookName(book)} {chapter}
               </h2>

@@ -47,7 +47,7 @@ export default function SettingsView() {
         <div className="flex items-center gap-2.5">
           <Settings size={20} className="text-blue-600" />
           <h2 className="text-xl font-bold text-slate-900 font-sans">
-            Settings & Server Status
+            Settings & Local Data
           </h2>
         </div>
         <button
@@ -67,10 +67,10 @@ export default function SettingsView() {
           <div className="space-y-1.5">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 font-sans">
               <HardDrive size={18} className="text-blue-500" />
-              Local Exegesis Server Link
+              Local Study Database
             </h3>
             <p className="text-sm text-slate-500 font-sans">
-               Host: <code className="bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded text-xs text-blue-600 font-mono">http://localhost:5050</code> &bull; Driver: SQLite (rhelo.db)
+              Managed automatically by Rhelo &bull; SQLite (rhelo.db)
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export default function SettingsView() {
         {/* Theme Settings Display */}
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4 flex items-center gap-2 font-sans">
-            <ShieldCheck size={14} /> Design System theme variables (zenrev aesthetics)
+            <ShieldCheck size={14} /> Rhelo interface theme
           </h4>
           <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
             <p className="text-sm text-slate-500 font-sans">

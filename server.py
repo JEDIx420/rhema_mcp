@@ -1,10 +1,13 @@
 import sqlite3
 import json
 import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
 from rhelo_backend.config import get_settings
 from rhelo_backend.database import connect as get_db_connection
-from rhelo_backend.mcp_server import TOOL_NAMES, mcp
+from rhelo_backend.tool_names import TOOL_NAMES
 from rhelo_backend.http_server import serve
 from rhelo_backend.translations import ENGLISH_TRANSLATIONS, normalize_translation_code
 
@@ -138,354 +141,6 @@ def compile_html_to_pdf(html_content: str, title: str, output_path: str):
 
     doc.build(story)
 
-def search_scriptures(query: str, book: str = None) -> str:
-    """
-    Search the English Bible text using full-text search (FTS5).
-    Optionally filter by book abbreviation (e.g. 'GEN', 'MAT').
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        if book:
-            cursor.execute("""
-                SELECT id, book, chapter, verse, text_en 
-                FROM search_en 
-                WHERE text_en MATCH ? AND book = ? 
-                LIMIT 50
-            """, (query, book.upper()))
-        else:
-            cursor.execute("""
-                SELECT id, book, chapter, verse, text_en 
-                FROM search_en 
-                WHERE text_en MATCH ? 
-                LIMIT 50
-            """, (query,))
-        
-        rows = cursor.fetchall()
-        if not rows:
-            return f"No results found for query: '{query}'"
-        
-        results = []
-        for r in rows:
-            results.append(f"[{r['id']}] {r['text_en']}")
-        return "\n".join(results)
-    except Exception as e:
-        return f"Error executing search: {e}"
-    finally:
-        conn.close()
-
-def get_verse_details(verse_id: str) -> str:
-    """
-    Retrieve comprehensive details for a specific verse ID (e.g. 'GEN.1.1' or 'MAT.1.1').
-    Includes all translations, commentary, linked places, timeline events, and cross-references.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Get translations
-        cursor.execute("SELECT * FROM verses WHERE id = ?", (verse_id.upper(),))
-        verse = cursor.fetchone()
-        if not verse:
-            return f"Verse '{verse_id}' not found in database."
-        
-        # Get commentaries
-        cursor.execute("SELECT commentary_id, text FROM commentaries WHERE verse_id = ?", (verse_id.upper(),))
-        commentaries = cursor.fetchall()
-        
-        # Get geocoded places
-        cursor.execute("""
-            SELECT gp.name, gp.latitude, gp.longitude, gp.type 
-            FROM geography_places gp
-            JOIN verse_geography vg ON gp.place_id = vg.place_id
-            WHERE vg.verse_id = ?
-        """, (verse_id.upper(),))
-        places = cursor.fetchall()
-        
-        # Get timeline events
-        cursor.execute("""
-            SELECT te.title, te.year, te.location, te.description 
-            FROM timeline_events te
-            JOIN event_verses ev ON te.event_id = ev.event_id
-            WHERE ev.verse_id = ?
-        """, (verse_id.upper(),))
-        events = cursor.fetchall()
-        
-        # Get cross-references
-        cursor.execute("""
-            SELECT to_verse, votes FROM cross_references 
-            WHERE from_verse = ? 
-            ORDER BY votes DESC LIMIT 10
-        """, (verse_id.upper(),))
-        cross_refs = cursor.fetchall()
-        
-        # Format output
-        output = []
-        output.append(f"=== Verse Details: {verse['id']} ===")
-        output.append(f"English (KJV): {verse['text_en']}")
-        output.append(f"Original Text (Hebrew/Greek): {verse['text_original']}")
-        output.append(f"Hindi: {verse['text_hi']}")
-        output.append(f"Telugu: {verse['text_te']}")
-        output.append(f"Malayalam: {verse['text_ml']}")
-        output.append(f"Tamil: {verse['text_ta']}")
-        output.append("")
-        
-        if commentaries:
-            output.append("--- Commentaries ---")
-            for c in commentaries:
-                output.append(f"[{c['commentary_id']}]: {c['text']}")
-            output.append("")
-            
-        if places:
-            output.append("--- Geography (Geocoded Places) ---")
-            for p in places:
-                output.append(f"- {p['name']} ({p['type']}) at Coordinates: ({p['latitude']}, {p['longitude']})")
-            output.append("")
-            
-        if events:
-            output.append("--- Chronological Timeline Events ---")
-            for e in events:
-                year_str = f"{abs(e['year'])} BC" if e['year'] < 0 else f"AD {e['year']}"
-                output.append(f"- {e['title']} ({year_str}) at {e['location']}: {e['description']}")
-            output.append("")
-            
-        if cross_refs:
-            output.append("--- Top Cross-References ---")
-            for cr in cross_refs:
-                output.append(f"- {cr['to_verse']} (votes: {cr['votes']})")
-            output.append("")
-            
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error retrieving verse details: {e}"
-    finally:
-        conn.close()
-
-def search_dictionary_and_lexicon(query: str) -> str:
-    """
-    Search Easton's/Smith's Bible Dictionaries and Strong's Concordance Greek/Hebrew lexicon.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Search Dictionary FTS
-        cursor.execute("""
-            SELECT name, definition_text 
-            FROM dictionary_fts 
-            WHERE dictionary_fts MATCH ? 
-            LIMIT 15
-        """, (query,))
-        dict_rows = cursor.fetchall()
-        
-        # Search Strong's Lexicon FTS
-        cursor.execute("""
-            SELECT strongs_id, lemma, definition 
-            FROM lexicon_fts 
-            WHERE lexicon_fts MATCH ? 
-            LIMIT 15
-        """, (query,))
-        lex_rows = cursor.fetchall()
-        
-        output = []
-        if dict_rows:
-            output.append("=== Bible Dictionary Matches ===")
-            for r in dict_rows:
-                output.append(f"Term: {r['name']}")
-                output.append(f"Definition: {r['definition_text'][:300]}...")
-                output.append("-" * 30)
-            output.append("")
-            
-        if lex_rows:
-            output.append("=== Strong's Lexicon Matches ===")
-            for r in lex_rows:
-                output.append(f"Strong's ID: {r['strongs_id']} | Lemma: {r['lemma']}")
-                output.append(f"Definition: {r['definition']}")
-                output.append("-" * 30)
-            output.append("")
-            
-        if not output:
-            return f"No dictionary or lexicon matches found for: '{query}'"
-            
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error executing lookup: {e}"
-    finally:
-        conn.close()
-
-def search_topics(query: str) -> str:
-    """
-    Search subjects and entries in Nave's Topical Index.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT subject, entry 
-            FROM naves_fts 
-            WHERE naves_fts MATCH ? 
-            LIMIT 15
-        """, (query,))
-        rows = cursor.fetchall()
-        
-        if not rows:
-            return f"No topical matches found in Nave's Index for: '{query}'"
-            
-        output = []
-        output.append("=== Nave's Topical Index Matches ===")
-        for r in rows:
-            output.append(f"Subject: {r['subject']}")
-            output.append(f"Entry References: {r['entry']}")
-            output.append("-" * 40)
-            
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error executing topical search: {e}"
-    finally:
-        conn.close()
-
-def get_biography(person_id: str) -> str:
-    """
-    Retrieve biographical profile, unique attributes, and family relationships for a person ID (e.g. 'Adam_1', 'David_1').
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Get person profile
-        cursor.execute("SELECT * FROM people WHERE id = ?", (person_id,))
-        person = cursor.fetchone()
-        if not person:
-            # Try searching by name case-insensitive
-            cursor.execute("SELECT * FROM people WHERE name LIKE ? LIMIT 1", (f"{person_id}%",))
-            person = cursor.fetchone()
-            if not person:
-                return f"Person '{person_id}' not found in database."
-        
-        # Get relationships
-        cursor.execute("""
-            SELECT r.relationship_type, p.name AS relation_name, r.person_id_2 AS relation_id, r.verse_id 
-            FROM relationships r
-            JOIN people p ON r.person_id_2 = p.id
-            WHERE r.person_id_1 = ?
-        """, (person['id'],))
-        relations = cursor.fetchall()
-        
-        # Get Hitchcock name meaning if matches
-        cursor.execute("SELECT meaning FROM bible_names_dictionary WHERE name = ?", (person['name'],))
-        name_meaning = cursor.fetchone()
-        
-        output = []
-        output.append(f"=== Biographical Profile: {person['name']} ===")
-        output.append(f"ID: {person['id']}")
-        output.append(f"Sex: {person['sex']}")
-        if person['tribe']:
-            output.append(f"Tribe: {person['tribe']}")
-        if person['unique_attribute']:
-            output.append(f"Attribute: {person['unique_attribute']}")
-        if person['notes']:
-            output.append(f"Notes: {person['notes']}")
-        if name_meaning:
-            output.append(f"Name Meaning (Hitchcock's): {name_meaning['meaning']}")
-        output.append("")
-        
-        if relations:
-            output.append("--- Family & Social Relationships ---")
-            for r in relations:
-                ref_str = f" in {r['verse_id']}" if r['verse_id'] else ""
-                output.append(f"- {person['name']} is the {r['relationship_type']} of {r['relation_name']} ({r['relation_id']}){ref_str}")
-                
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error retrieving biography: {e}"
-    finally:
-        conn.close()
-
-def list_geography_routes() -> str:
-    """
-    Retrieve a list of available historical biblical routes/journeys (e.g. Abraham's journey, Exodus, Paul's missionary trips).
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT route_id, title, description FROM geography_routes ORDER BY route_id")
-        rows = cursor.fetchall()
-        if not rows:
-            return "No historical routes found in the database."
-        output = ["=== Historical Biblical Routes ==="]
-        for r in rows:
-            output.append(f"- ID: {r['route_id']} | Title: {r['title']}")
-            if r['description']:
-                output.append(f"  Description: {r['description']}")
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error listing routes: {e}"
-    finally:
-        conn.close()
-
-def get_route_points(route_id: str) -> str:
-    """
-    Retrieve the ordered list of coordinates, place names, and scripture references for a specific route ID.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Check route details
-        cursor.execute("SELECT title, description FROM geography_routes WHERE route_id = ?", (route_id.lower(),))
-        route = cursor.fetchone()
-        if not route:
-            return f"Route '{route_id}' not found."
-
-        cursor.execute("""
-            SELECT sequence_order, latitude, longitude, place_name, associated_verse_id
-            FROM route_points
-            WHERE route_id = ?
-            ORDER BY sequence_order
-        """, (route_id.lower(),))
-        rows = cursor.fetchall()
-
-        output = [f"=== Route: {route['title']} ==="]
-        if route['description']:
-            output.append(route['description'])
-        output.append("")
-
-        for r in rows:
-            ref_str = f" (Ref: {r['associated_verse_id']})" if r['associated_verse_id'] else ""
-            output.append(f"{r['sequence_order']}. {r['place_name']}{ref_str} at Coordinates: ({r['latitude']}, {r['longitude']})")
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error getting route points: {e}"
-    finally:
-        conn.close()
-
-def get_chapter_map_data(book: str, chapter: int) -> str:
-    """
-    Retrieve geocoded coordinates and place names mentioned in a specific book and chapter (e.g. book='GEN', chapter=12).
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Fetch places in chapter
-        cursor.execute("""
-            SELECT DISTINCT gp.name, gp.latitude, gp.longitude, gp.type, vg.verse_id
-            FROM geography_places gp
-            JOIN verse_geography vg ON gp.place_id = vg.place_id
-            JOIN verses v ON vg.verse_id = v.id
-            WHERE v.book = ? AND v.chapter = ?
-            ORDER BY vg.verse_id
-        """, (book.upper(), chapter))
-        rows = cursor.fetchall()
-        
-        if not rows:
-            return f"No geocoded places found in {book.upper()} chapter {chapter}."
-            
-        output = []
-        output.append(f"=== Geocoded Places in {book.upper()} Chapter {chapter} ===")
-        for r in rows:
-            output.append(f"[{r['verse_id']}] {r['name']} ({r['type']}) at Coordinates: ({r['latitude']}, {r['longitude']})")
-        return "\n".join(output)
-    except Exception as e:
-        return f"Error retrieving chapter maps: {e}"
-    finally:
-        conn.close()
-
 # --- Built-in HTTP JSON API Server for Next.js Frontend ---
 import threading
 from http.server import BaseHTTPRequestHandler
@@ -574,60 +229,6 @@ NT_BOOKS = [
 ALL_BOOKS = OT_BOOKS + NT_BOOKS
 BOOK_ORDER = {code: i for i, code in enumerate(ALL_BOOKS)}
 
-def convert_to_wav(input_bytes: bytes) -> bytes:
-    import tempfile
-    import subprocess
-    import os
-    import sys
-
-    # Check if ffmpeg is available
-    ffmpeg_cmd = "ffmpeg"
-    if os.path.exists("/opt/homebrew/bin/ffmpeg"):
-        ffmpeg_cmd = "/opt/homebrew/bin/ffmpeg"
-    elif os.path.exists("/usr/local/bin/ffmpeg"):
-        ffmpeg_cmd = "/usr/local/bin/ffmpeg"
-    
-    try:
-        subprocess.run([ffmpeg_cmd, "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except FileNotFoundError:
-        sys.stderr.write("ffmpeg not found, skipping conversion and returning original bytes.\n")
-        return input_bytes
-
-    in_fd, in_path = tempfile.mkstemp()
-    os.close(in_fd)
-    out_fd, out_path = tempfile.mkstemp(suffix=".wav")
-    os.close(out_fd)
-
-    try:
-        with open(in_path, "wb") as f:
-            f.write(input_bytes)
-            
-        result = subprocess.run([
-            ffmpeg_cmd,
-            "-y",
-            "-i", in_path,
-            "-acodec", "pcm_s16le",
-            "-ar", "16000",
-            "-ac", "1",
-            out_path
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        if result.returncode != 0:
-            sys.stderr.write(f"ffmpeg conversion failed: {result.stderr.decode('utf-8')}\n")
-            return input_bytes
-            
-        with open(out_path, "rb") as f:
-            wav_data = f.read()
-        return wav_data
-    except Exception as e:
-        sys.stderr.write(f"Audio conversion exception: {e}\n")
-        return input_bytes
-    finally:
-        if os.path.exists(in_path):
-            os.remove(in_path)
-        if os.path.exists(out_path):
-            os.remove(out_path)
-
 class JSONAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         import sys
@@ -691,9 +292,18 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE session_id = ?
                     """, (title, content, session_id))
-                    conn.commit()
-                    response_data = {"status": "success", "session_id": session_id}
-                    status_code = 200
+                    if cursor.rowcount == 0:
+                        response_data = {"error": "Session not found"}
+                        status_code = 404
+                        conn.rollback()
+                    else:
+                        conn.commit()
+                        saved_session = cursor.execute(
+                            "SELECT session_id, title, content, updated_at FROM sessions WHERE session_id = ?",
+                            (session_id,),
+                        ).fetchone()
+                        response_data = {"status": "success", "session": dict(saved_session)}
+                        status_code = 200
                 else:
                     response_data = {"error": "Missing session_id"}
                     status_code = 400
@@ -763,6 +373,28 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_url = urlparse(self.path)
         path = parsed_url.path
+
+        if path == "/api/health":
+            status_code = 200
+            try:
+                with get_db_connection() as health_connection:
+                    health_connection.execute("SELECT 1 FROM sessions LIMIT 1").fetchone()
+                response_data = {
+                    "status": "ready",
+                    "database_path": str(get_settings().database_path),
+                    "boot_token": os.environ.get("RHELO_BOOT_TOKEN", ""),
+                    "backend_version": "36",
+                }
+            except Exception as error:
+                status_code = 503
+                response_data = {"status": "starting", "error": str(error)}
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            return
         
         if path.startswith("/documents/"):
             filename = os.path.basename(path)
@@ -1362,6 +994,7 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
 
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
         self.send_cors_headers()
         self.end_headers()
         self.wfile.write(json.dumps(response_data).encode('utf-8'))
@@ -1369,20 +1002,43 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
 def start_http_server():
     serve(JSONAPIHandler)
 
-if __name__ == "__main__":
-    # Cache lexicon lemmas first
-    build_lexicon_lookup()
+def log_desktop_database_path():
+    """Record the database path received by the packaged sidecar."""
+    log_dir = Path.home() / "Library" / "Application Support" / "com.rhelo.app"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with (log_dir / "rhelo_debug.log").open("a", encoding="utf-8") as log_file:
+            log_file.write(
+                f"{datetime.now(timezone.utc).isoformat()} "
+                f"pid={os.getpid()} "
+                f"RHELO_DB_PATH={os.getenv('RHELO_DB_PATH')!r} "
+                f"resolved_database={DB_PATH!r}\n"
+            )
+    except OSError as error:
+        print(f"Unable to write Rhelo database diagnostic: {error}", file=sys.stderr)
 
-    import sys
+
+def main():
+    log_desktop_database_path()
     mode = os.environ.get("RHELO_MODE", "auto").lower()
     if mode == "http":
         print("Running Rhelo in HTTP API mode...")
+        threading.Thread(target=build_lexicon_lookup, daemon=True).start()
         start_http_server()
     elif mode == "both" or (mode == "auto" and sys.stdin.isatty()):
+        from rhelo_backend.mcp_server import mcp
+
         print("Running Rhelo in combined HTTP and MCP development mode...")
+        threading.Thread(target=build_lexicon_lookup, daemon=True).start()
         api_thread = threading.Thread(target=start_http_server, daemon=True)
         api_thread.start()
         mcp.run()
     else:
+        from rhelo_backend.mcp_server import mcp
+
         print("Running Rhelo in MCP stdio mode...", file=sys.stderr)
         mcp.run()
+
+
+if __name__ == "__main__":
+    main()

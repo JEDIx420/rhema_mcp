@@ -15,6 +15,8 @@
         "title": "Rhelo Study Engine",
         "width": 800,
         "height": 600,
+        "visible": false,
+        "dragDropEnabled": false,
         "resizable": true,
         "fullscreen": false
       }
@@ -33,10 +35,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../../rhelo.db",
-      "../../ggml-base.bin"
-    ],
+    "resources": {
+      "../../rhelo.db": "rhelo.db",
+      "../../ggml-base.bin": "ggml-base.bin"
+    },
     "externalBin": [
       "binaries/server"
     ],
@@ -44,7 +46,8 @@
       "debugApplicationIdSuffix": ".debug"
     },
     "macOS": {
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "10.15"
     }
   }
 }

@@ -5,6 +5,7 @@ from rhelo_backend.translations import normalize_translation_code
 
 
 def search_scriptures(query: str, book: str | None = None, translation_code: str = "en_bsb") -> str:
+    """Search an English Bible edition, optionally limited to one book code."""
     translation_code = normalize_translation_code(translation_code)
     sql = "SELECT id, text FROM search_english_translations WHERE search_english_translations MATCH ? AND translation_code = ?"
     params: list[object] = [query, translation_code]
@@ -21,6 +22,7 @@ def search_scriptures(query: str, book: str | None = None, translation_code: str
 
 
 def get_verse_details(verse_id: str, translation_code: str = "en_bsb") -> str:
+    """Return multilingual text and linked study material for one verse."""
     verse_id = verse_id.upper()
     translation_code = normalize_translation_code(translation_code)
     try:
@@ -57,6 +59,7 @@ def get_verse_details(verse_id: str, translation_code: str = "en_bsb") -> str:
 
 
 def search_dictionary_and_lexicon(query: str) -> str:
+    """Search Bible dictionaries and the Hebrew/Greek Strong's lexicon."""
     try:
         with connection() as database:
             dictionaries = database.execute("SELECT name, definition_text FROM dictionary_fts WHERE dictionary_fts MATCH ? LIMIT 15", (query,)).fetchall()
@@ -76,6 +79,7 @@ def search_dictionary_and_lexicon(query: str) -> str:
 
 
 def search_topics(query: str) -> str:
+    """Search Nave's Topical Index for subjects and scripture references."""
     try:
         with connection() as database:
             rows = database.execute("SELECT subject, entry FROM naves_fts WHERE naves_fts MATCH ? LIMIT 15", (query,)).fetchall()
@@ -87,6 +91,7 @@ def search_topics(query: str) -> str:
 
 
 def get_biography(person_id: str) -> str:
+    """Return a biblical person's profile, name meaning, and relationships."""
     try:
         with connection() as database:
             person = database.execute("SELECT * FROM people WHERE id = ?", (person_id,)).fetchone()
@@ -111,6 +116,7 @@ def get_biography(person_id: str) -> str:
 
 
 def list_geography_routes() -> str:
+    """List the curated biblical journeys available in the local atlas."""
     try:
         with connection() as database:
             rows = database.execute("SELECT route_id, title, description FROM geography_routes ORDER BY route_id").fetchall()
@@ -125,6 +131,7 @@ def list_geography_routes() -> str:
 
 
 def get_route_points(route_id: str) -> str:
+    """Return the ordered locations and scripture references for a route."""
     try:
         with connection() as database:
             route = database.execute("SELECT title, description FROM geography_routes WHERE route_id = ?", (route_id.lower(),)).fetchone()
@@ -140,6 +147,7 @@ def get_route_points(route_id: str) -> str:
 
 
 def get_chapter_map_data(book: str, chapter: int) -> str:
+    """Return geocoded places associated with a Bible book and chapter."""
     try:
         with connection() as database:
             rows = database.execute("""SELECT DISTINCT gp.name, gp.latitude, gp.longitude, gp.type, vg.verse_id FROM geography_places gp JOIN verse_geography vg ON gp.place_id = vg.place_id JOIN verses v ON vg.verse_id = v.id WHERE v.book = ? AND v.chapter = ? ORDER BY vg.verse_id""", (book.upper(), chapter)).fetchall()

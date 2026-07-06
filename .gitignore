@@ -21,6 +21,10 @@ frontend/src-tauri/target/
 
 # Generated study PDFs
 frontend/public/documents/
+documents/
+
+# Local diagnostic output
+tts_voices.log
 
 # Local runtime and generated packaging assets
 backend.log

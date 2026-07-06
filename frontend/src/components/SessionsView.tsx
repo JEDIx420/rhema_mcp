@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { 
   fetchSessions, 
+  getApiBase,
   createSession, 
   updateSession, 
   deleteSession, 
@@ -40,6 +41,7 @@ import {
   generateSessionPDF 
 } from "@/lib/api";
 import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
+import PdfViewer from "./PdfViewer";
 
 interface Session {
   session_id: string;
@@ -84,8 +86,10 @@ export default function SessionsView() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [pdfViewer, setPdfViewer] = useState<{ url: string; filename: string } | null>(null);
   const [titleInput, setTitleInput] = useState("");
   const titleInputRef = useRef(titleInput);
+  const selectedSessionRef = useRef<Session | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize TipTap
@@ -129,9 +133,11 @@ export default function SessionsView() {
       const data = await fetchSessions();
       const sList = data.sessions || [];
       setSessions(sList);
-      if (sList.length > 0 && !selectedSession) {
-        setSelectedSession(sList[0]);
-      }
+      setSelectedSession((current) => {
+        if (sList.length === 0) return null;
+        if (!current) return sList[0];
+        return sList.find((session: Session) => session.session_id === current.session_id) || sList[0];
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -151,6 +157,10 @@ export default function SessionsView() {
   useEffect(() => {
     titleInputRef.current = titleInput;
   }, [titleInput]);
+
+  useEffect(() => {
+    selectedSessionRef.current = selectedSession;
+  }, [selectedSession]);
 
   // Dispatch selection changes globally
   useEffect(() => {
@@ -215,14 +225,14 @@ export default function SessionsView() {
       const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
       const initialContent = `<h3 style="color: #2563eb; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${dateString}</h3><p></p>`;
       const res = await createSession("Untitled Study Session", initialContent);
-      const newSession = {
-        session_id: res.session_id,
-        title: res.title,
-        content: res.content,
-        updated_at: new Date().toISOString()
-      };
-      setSessions((prev) => [newSession, ...prev]);
-      setSelectedSession(newSession);
+      const refreshed = await fetchSessions();
+      const refreshedSessions = refreshed.sessions || [];
+      setSessions(refreshedSessions);
+      setSelectedSession(
+        refreshedSessions.find((session: Session) => session.session_id === res.session_id)
+          || refreshedSessions[0]
+          || null,
+      );
     } catch (err) {
       console.error(err);
     } finally {
@@ -236,15 +246,14 @@ export default function SessionsView() {
     try {
       const htmlContent = editor.getHTML();
       await updateSession(selectedSession.session_id, titleInput, htmlContent);
-      
-      // Update local state lists
-      setSessions((prev) => 
-        prev.map((s) => 
-          s.session_id === selectedSession.session_id 
-            ? { ...s, title: titleInput, content: htmlContent, updated_at: new Date().toISOString() } 
-            : s
-        )
+      const refreshed = await fetchSessions();
+      const refreshedSessions = refreshed.sessions || [];
+      setSessions(refreshedSessions);
+      setSelectedSession(
+        refreshedSessions.find((session: Session) => session.session_id === selectedSession.session_id)
+          || null,
       );
+      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
       
       // Flash save state
       setTimeout(() => setSaving(false), 500);
@@ -259,17 +268,19 @@ export default function SessionsView() {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(async () => {
-      if (!selectedSession) return;
+      const targetSession = selectedSessionRef.current;
+      if (!targetSession) return;
       try {
         const currentTitle = titleInputRef.current;
-        await updateSession(selectedSession.session_id, currentTitle, htmlContent);
-        setSessions((prev) => 
-          prev.map((s) => 
-            s.session_id === selectedSession.session_id 
-              ? { ...s, title: currentTitle, content: htmlContent, updated_at: new Date().toISOString() } 
-              : s
-          )
+        await updateSession(targetSession.session_id, currentTitle, htmlContent);
+        const refreshed = await fetchSessions();
+        const refreshedSessions = refreshed.sessions || [];
+        const refreshedTarget = refreshedSessions.find(
+          (session: Session) => session.session_id === targetSession.session_id,
         );
+        setSessions(refreshedSessions);
+        if (refreshedTarget) selectedSessionRef.current = refreshedTarget;
+        window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
       } catch (err) {
         console.error("Auto-save failed", err);
       }
@@ -299,17 +310,10 @@ export default function SessionsView() {
       const res = await generateSessionPDF(selectedSession.session_id, titleInput, htmlContent);
       if (res.status === "success" && res.pdf_url) {
         // Since we are running in local source dev mode, prepend the server host
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
+        const apiBase = getApiBase();
         const fullUrl = `${apiBase}${res.pdf_url}`;
         setExportUrl(fullUrl);
-        
-        // Use a hidden anchor element with 'download' attribute to trigger WebView save dialog
-        const link = document.createElement("a");
-        link.href = fullUrl;
-        link.download = `${titleInput || "session"}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        setPdfViewer({ url: fullUrl, filename: `${titleInput || "session"}.pdf` });
       }
     } catch (err) {
       console.error(err);
@@ -729,9 +733,13 @@ export default function SessionsView() {
                   <AlertCircle size={13} />
                   <span>PDF Document Compiled Successfully! If download didn&apos;t trigger, click right button to open.</span>
                 </div>
-                <a href={exportUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-blue-900">
+                <button
+                  type="button"
+                  onClick={() => setPdfViewer({ url: exportUrl, filename: `${titleInput || "session"}.pdf` })}
+                  className="font-bold underline hover:text-blue-900"
+                >
                   Open PDF
-                </a>
+                </button>
               </div>
             )}
           </>
@@ -743,6 +751,13 @@ export default function SessionsView() {
           </div>
         )}
       </div>
+      {pdfViewer && (
+        <PdfViewer
+          url={pdfViewer.url}
+          filename={pdfViewer.filename}
+          onClose={() => setPdfViewer(null)}
+        />
+      )}
     </div>
   );
 }

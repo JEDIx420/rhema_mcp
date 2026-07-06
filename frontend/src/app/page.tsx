@@ -7,7 +7,7 @@ import AppViewRouter from "@/components/AppViewRouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Save } from "lucide-react";
 import { fetchSessions, updateSession } from "@/lib/api";
-import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
+import { readVerseDragPayload, renderVerseDropHtml, VerseDragPayload } from "@/lib/verseDrop";
 
 const invokeTauri = async (cmd: string, args: any) => {
   if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
@@ -61,7 +61,7 @@ export default function Home() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>("Adam_1");
 
   // Drag-and-drop overlays state
-  const [draggedVerse, setDraggedVerse] = useState<{ verseId: string; verseText: string } | null>(null);
+  const [draggedVerse, setDraggedVerse] = useState<VerseDragPayload | null>(null);
 
   // Active session states
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -79,19 +79,27 @@ export default function Home() {
   const [reviewTargetSessionId, setReviewTargetSessionId] = useState<string | null>(null);
 
   // Track window drag listeners
+  // WebKit (WKWebView/Tauri macOS) fires dragend before drop completes —
+  // debounce the state clear so the drop target stays mounted long enough
+  // for onDrop to fire and process.
   useEffect(() => {
+    let dragEndTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleDragStartEvent = (e: Event) => {
+      // If a new drag starts while a previous dragend timer is pending, cancel it
+      if (dragEndTimer) { clearTimeout(dragEndTimer); dragEndTimer = null; }
       const customEvent = e as CustomEvent;
       if (customEvent.detail) {
-        setDraggedVerse({
+        setDraggedVerse(customEvent.detail.payload || {
           verseId: customEvent.detail.verseId,
-          verseText: customEvent.detail.verseText
+          translations: [{ label: "Reference", text: customEvent.detail.verseText }],
         });
       }
     };
 
     const handleDragEndEvent = () => {
-      setDraggedVerse(null);
+      // Debounce: give onDrop 150ms to fire before hiding the drop zone
+      dragEndTimer = setTimeout(() => setDraggedVerse(null), 150);
     };
 
     window.addEventListener("rhelo-drag-start", handleDragStartEvent);
@@ -100,6 +108,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("rhelo-drag-start", handleDragStartEvent);
       window.removeEventListener("rhelo-drag-end", handleDragEndEvent);
+      if (dragEndTimer) clearTimeout(dragEndTimer);
     };
   }, []);
 
@@ -140,6 +149,17 @@ export default function Home() {
     return () => window.removeEventListener("rhelo-session-updated", handleSessionUpdated);
   }, [activeSessionId]);
 
+  const resolveSessionTargetId = async () => {
+    const response = await fetchSessions();
+    const sessions = response.sessions || [];
+    setStudySessionsList(sessions);
+    const target = sessions.find((session: any) => session.session_id === activeSessionId) || sessions[0];
+    if (!target) throw new Error("Create a study session before saving notes or dictation.");
+    setActiveSessionId(target.session_id);
+    setActiveSessionTitle(target.title);
+    return target.session_id as string;
+  };
+
   const startRecording = async () => {
     const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
     
@@ -159,7 +179,12 @@ export default function Home() {
         mediaRecorder.onstop = async () => {
           setIsProcessingSTT(true);
           try {
-            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+            if (audioChunksRef.current.length === 0) {
+              throw new Error("The microphone did not return any audio data.");
+            }
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: mediaRecorder.mimeType || audioChunksRef.current[0].type,
+            });
             const arrayBuffer = await audioBlob.arrayBuffer();
             
             // Decode audio binary to float PCM samples via AudioContext
@@ -171,10 +196,11 @@ export default function Home() {
             
             // Call offline native Tauri command
             const text = await invokeTauri("transcribe_audio", { audioSamples: samples }) as string;
+            await audioContext.close();
             
             if (text && text.trim()) {
               setTranscribedText(text);
-              setReviewTargetSessionId(activeSessionId);
+              setReviewTargetSessionId(await resolveSessionTargetId());
             } else {
               alert("Speech recognition was unable to capture any words. Please try again.");
             }
@@ -221,11 +247,16 @@ export default function Home() {
           setIsRecording(false);
         };
         
-        recognition.onresult = (event: any) => {
+        recognition.onresult = async (event: any) => {
           const text = event.results[0][0].transcript;
           if (text && text.trim()) {
             setTranscribedText(text);
-            setReviewTargetSessionId(activeSessionId);
+            try {
+              setReviewTargetSessionId(await resolveSessionTargetId());
+            } catch (error) {
+              setTranscribedText(null);
+              alert(error instanceof Error ? error.message : String(error));
+            }
           } else {
             alert("Speech recognition was unable to capture any words. Please try again.");
           }
@@ -260,14 +291,21 @@ export default function Home() {
   const handleConfirmTranscription = async () => {
     if (!reviewTargetSessionId || !transcribedText || !transcribedText.trim()) return;
     try {
-      const targetSession = studySessionsList.find(s => s.session_id === reviewTargetSessionId);
-      if (!targetSession) return;
+      const sessionsResponse = await fetchSessions();
+      const sessions = sessionsResponse.sessions || [];
+      const targetSession = sessions.find((session: any) => session.session_id === reviewTargetSessionId);
+      if (!targetSession) throw new Error("The selected study session no longer exists.");
       
       const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
       const timestamp = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
       
       const updatedContent = contentWithDate + `<p><strong>[${timestamp}]</strong>: ${transcribedText.trim()}</p>`;
       await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
+      setStudySessionsList(sessions.map((session: any) =>
+        session.session_id === reviewTargetSessionId
+          ? { ...session, content: updatedContent, updated_at: new Date().toISOString() }
+          : session
+      ));
       
       window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
       window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
@@ -278,6 +316,7 @@ export default function Home() {
       setActiveView("sessions");
     } catch (err) {
       console.error(err);
+      alert(`The transcription could not be saved: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -362,59 +401,63 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* 2. Magnetic Drop Zone overlay */}
-      <AnimatePresence>
-        {draggedVerse && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 50 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className="fixed bottom-6 right-6 z-[2000] p-5 rounded-2xl border-2 border-dashed border-blue-400 bg-white/95 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center gap-2 pointer-events-auto"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={async (e) => {
-              e.preventDefault();
-              const versePayload = readVerseDragPayload(e.dataTransfer);
-              if (versePayload) {
-                try {
-                  const targetSessionId = activeSessionId;
-                  if (targetSessionId) {
-                    const targetSession = studySessionsList.find(s => s.session_id === targetSessionId);
-                    if (targetSession) {
-                      const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
-                      const updatedContent = contentWithDate + renderVerseDropHtml(versePayload);
-                      await updateSession(targetSession.session_id, targetSession.title, updatedContent);
-                      
-                      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
-                      setActiveView("sessions");
-                    }
-                  } else {
-                    const sessionsRes = await fetchSessions();
-                    const sessions = sessionsRes.sessions || [];
-                    if (sessions.length > 0) {
-                      const latest = sessions[0];
-                      const contentWithDate = addDateHeaderIfNeeded(latest.content || "");
-                      const updatedContent = contentWithDate + renderVerseDropHtml(versePayload);
-                      await updateSession(latest.session_id, latest.title, updatedContent);
-                      
-                      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
-                      setActiveView("sessions");
-                    }
-                  }
-                } catch (err) {
-                  console.error(err);
-                }
-              }
-              setDraggedVerse(null);
-            }}
-          >
-            <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 animate-bounce">
-              <Save size={20} />
-            </div>
-            <p className="text-sm font-bold text-slate-800 font-sans">Drop here to save reference</p>
-            <p className="text-[11px] text-slate-400 font-sans">Appends to: <strong className="text-blue-600">{activeSessionTitle || "latest session"}</strong></p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 2. Magnetic Drop Zone overlay — always mounted, visibility toggled via CSS
+         to prevent WebKit's dragend from unmounting the target before onDrop fires */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8, y: 50 }}
+        animate={
+          draggedVerse
+            ? { opacity: 1, scale: 1, y: 0, pointerEvents: "auto" as const }
+            : { opacity: 0, scale: 0.8, y: 50, pointerEvents: "none" as const }
+        }
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        className="fixed bottom-6 right-6 z-[2000] p-5 rounded-2xl border-2 border-dashed border-blue-400 bg-white/95 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center gap-2"
+        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); console.log("[DRAG-TRACE] onDragEnter fired!"); }}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onDragLeave={() => console.log("[DRAG-TRACE] onDragLeave fired!")}
+        onDrop={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("[DRAG-TRACE] onDrop fired!");
+          const versePayload = readVerseDragPayload(e.dataTransfer) || draggedVerse;
+          console.log("[DRAG-DEBUG] e.dataTransfer types:", e.dataTransfer?.types);
+          console.log("[DRAG-DEBUG] Result of readVerseDragPayload:", readVerseDragPayload(e.dataTransfer));
+          console.log("[DRAG-DEBUG] Current draggedVerse state:", draggedVerse);
+          if (versePayload) {
+            try {
+              const sessionsResponse = await fetchSessions();
+              const sessions = sessionsResponse.sessions || [];
+              const targetSession = sessions.find((session: any) => session.session_id === activeSessionId) || sessions[0];
+              if (!targetSession) throw new Error("Create a study session before dropping a reference.");
+
+              const contentWithDate = addDateHeaderIfNeeded(targetSession.content || "");
+              const updatedContent = contentWithDate + renderVerseDropHtml(versePayload);
+              await updateSession(targetSession.session_id, targetSession.title, updatedContent);
+              setStudySessionsList(sessions.map((session: any) =>
+                session.session_id === targetSession.session_id
+                  ? { ...session, content: updatedContent, updated_at: new Date().toISOString() }
+                  : session
+              ));
+
+              window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
+              setActiveView("sessions");
+            } catch (err) {
+              const msg = `[RHELO-DROP-DEBUG] ${err instanceof Error ? err.stack || err.message : String(err)}`;
+              console.error(msg);
+            }
+          }
+          setDraggedVerse(null);
+        }}
+      >
+        {/* All children are pointer-events-none so the parent captures all drag events */}
+        <div className="pointer-events-none flex flex-col items-center justify-center gap-2">
+          <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 animate-bounce">
+            <Save size={20} />
+          </div>
+          <p className="text-sm font-bold text-slate-800 font-sans">Drop here to save reference</p>
+          <p className="text-[11px] text-slate-400 font-sans">Appends to: <strong className="text-blue-600">{activeSessionTitle || "latest session"}</strong></p>
+        </div>
+      </motion.div>
 
       {/* 3. Floating Voice Dictation mic toggle */}
       <div 

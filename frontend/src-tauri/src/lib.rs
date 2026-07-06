@@ -1,14 +1,249 @@
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::Manager;
+use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tts::Tts;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 struct WhisperModelState {
     context: Mutex<Option<WhisperContext>>,
+    initialization_error: Option<String>,
 }
 
-fn setup_database_and_sidecar(app: &mut tauri::App) -> Result<(), String> {
+struct DatabaseState {
+    path: PathBuf,
+}
+
+struct SidecarState {
+    child: Mutex<Option<CommandChild>>,
+}
+
+#[derive(Debug, Serialize)]
+struct Session {
+    session_id: String,
+    title: String,
+    content: String,
+    updated_at: String,
+}
+
+#[derive(Serialize)]
+struct SessionsResponse {
+    sessions: Vec<Session>,
+}
+
+#[derive(Serialize)]
+struct CreateSessionResponse {
+    status: &'static str,
+    session_id: String,
+    title: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct UpdateSessionResponse {
+    status: &'static str,
+    session: Session,
+}
+
+#[derive(Serialize)]
+struct DeleteSessionResponse {
+    status: &'static str,
+    session_id: String,
+}
+
+#[derive(Deserialize)]
+struct BackendHealth {
+    status: String,
+    database_path: String,
+    boot_token: String,
+}
+
+fn open_database(path: &Path) -> Result<Connection, String> {
+    let connection = Connection::open(path)
+        .map_err(|error| format!("Failed to open the Rhelo database: {error}"))?;
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| format!("Failed to configure SQLite busy timeout: {error}"))?;
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|error| format!("Failed to configure SQLite: {error}"))?;
+    Ok(connection)
+}
+
+fn read_session(connection: &Connection, session_id: &str) -> Result<Option<Session>, String> {
+    connection
+        .query_row(
+            "SELECT session_id, title, content, updated_at FROM sessions WHERE session_id = ?1",
+            [session_id],
+            |row| {
+                Ok(Session {
+                    session_id: row.get(0)?,
+                    title: row.get(1)?,
+                    content: row.get(2)?,
+                    updated_at: row.get(3)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| format!("Failed to read the study session: {error}"))
+}
+
+#[tauri::command]
+fn fetch_sessions(state: tauri::State<'_, DatabaseState>) -> Result<SessionsResponse, String> {
+    let connection = open_database(&state.path)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT session_id, title, content, updated_at FROM sessions ORDER BY updated_at DESC",
+        )
+        .map_err(|error| format!("Failed to prepare the sessions query: {error}"))?;
+    let sessions = statement
+        .query_map([], |row| {
+            Ok(Session {
+                session_id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|error| format!("Failed to fetch study sessions: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode study sessions: {error}"))?;
+    Ok(SessionsResponse { sessions })
+}
+
+#[tauri::command]
+fn create_session(
+    title: String,
+    content: String,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<CreateSessionResponse, String> {
+    let mut connection = open_database(&state.path)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Failed to start the create-session transaction: {error}"))?;
+    let session_id = uuid::Uuid::new_v4().to_string();
+    transaction
+        .execute(
+            "INSERT INTO sessions (session_id, title, content) VALUES (?1, ?2, ?3)",
+            params![session_id, title, content],
+        )
+        .map_err(|error| format!("Failed to create the study session: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Failed to commit the study session: {error}"))?;
+    Ok(CreateSessionResponse {
+        status: "success",
+        session_id,
+        title,
+        content,
+    })
+}
+
+#[tauri::command]
+fn update_session(
+    session_id: String,
+    title: String,
+    content: String,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<UpdateSessionResponse, String> {
+    let mut connection = open_database(&state.path)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Failed to start the update-session transaction: {error}"))?;
+    let changed = transaction
+        .execute(
+            "UPDATE sessions SET title = ?1, content = ?2, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?3",
+            params![title, content, session_id],
+        )
+        .map_err(|error| format!("Failed to update the study session: {error}"))?;
+    if changed == 0 {
+        return Err("The selected study session no longer exists.".to_string());
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Failed to commit the study session: {error}"))?;
+    let session = read_session(&connection, &session_id)?
+        .ok_or_else(|| "The updated study session could not be reloaded.".to_string())?;
+    Ok(UpdateSessionResponse {
+        status: "success",
+        session,
+    })
+}
+
+#[tauri::command]
+fn delete_session(
+    session_id: String,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<DeleteSessionResponse, String> {
+    let mut connection = open_database(&state.path)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Failed to start the delete-session transaction: {error}"))?;
+    let changed = transaction
+        .execute("DELETE FROM sessions WHERE session_id = ?1", [&session_id])
+        .map_err(|error| format!("Failed to delete the study session: {error}"))?;
+    if changed == 0 {
+        return Err("The selected study session no longer exists.".to_string());
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Failed to commit the session deletion: {error}"))?;
+    Ok(DeleteSessionResponse {
+        status: "success",
+        session_id,
+    })
+}
+
+fn wait_for_backend(
+    port: u16,
+    expected_database: &Path,
+    boot_token: &str,
+    timeout: Duration,
+) -> Result<(), String> {
+    let address = format!("127.0.0.1:{port}")
+        .parse()
+        .map_err(|error| format!("Invalid backend address: {error}"))?;
+    let started = Instant::now();
+
+    while started.elapsed() < timeout {
+        if let Ok(mut stream) =
+            std::net::TcpStream::connect_timeout(&address, Duration::from_millis(200))
+        {
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+            if stream
+                .write_all(
+                    b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+                )
+                .is_ok()
+            {
+                let mut response = String::new();
+                if stream.read_to_string(&mut response).is_ok() {
+                    if let Some(body) = response.split("\r\n\r\n").nth(1) {
+                        if let Ok(health) = serde_json::from_str::<BackendHealth>(body) {
+                            if health.status == "ready"
+                                && health.boot_token == boot_token
+                                && Path::new(&health.database_path) == expected_database
+                            {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    Err("Rhelo's local study service did not become ready in time.".to_string())
+}
+
+fn prepare_database(app: &mut tauri::App) -> Result<PathBuf, String> {
     // 1. Resolve source and destination DB paths
     let db_src = app
         .path()
@@ -34,22 +269,29 @@ fn setup_database_and_sidecar(app: &mut tauri::App) -> Result<(), String> {
         })?;
     }
 
-    // 3. Expose the writable database path to the PyInstaller process environment
-    std::env::set_var("RHELO_DB_PATH", db_dest.to_string_lossy().to_string());
+    Ok(db_dest)
+}
 
-    // 4. Spawn the sidecar server process
+fn spawn_sidecar(app: &mut tauri::App, db_path: &Path) -> Result<CommandChild, String> {
+    let boot_token = uuid::Uuid::new_v4().to_string();
     let sidecar = app
         .shell()
         .sidecar("server")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
-        .env("RHELO_DB_PATH", db_dest.to_string_lossy().to_string())
+        .env("RHELO_DB_PATH", db_path.to_string_lossy().to_string())
+        .env("RHELO_API_PORT", "5050")
+        .env("RHELO_BOOT_TOKEN", &boot_token)
         .env("RHELO_MODE", "http");
 
-    let (_rx, _child) = sidecar
+    let (_rx, child) = sidecar
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar server: {}", e))?;
 
-    Ok(())
+    if let Err(error) = wait_for_backend(5050, db_path, &boot_token, Duration::from_secs(30)) {
+        let _ = child.kill();
+        return Err(error);
+    }
+    Ok(child)
 }
 
 #[tauri::command]
@@ -119,9 +361,12 @@ async fn transcribe_audio(
         .context
         .lock()
         .map_err(|_| "Failed to lock Whisper context")?;
-    let ctx = ctx_guard
-        .as_ref()
-        .ok_or("Whisper model is not initialized. Please ensure ggml-base.bin is in resources.")?;
+    let ctx = ctx_guard.as_ref().ok_or_else(|| {
+        model_state.initialization_error.clone().unwrap_or_else(|| {
+            "Whisper model is not initialized. Please ensure ggml-base.bin is in resources."
+                .to_string()
+        })
+    })?;
 
     let mut state = ctx
         .create_state()
@@ -157,6 +402,8 @@ async fn transcribe_audio(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -166,27 +413,33 @@ pub fn run() {
                 )?;
             }
 
-            if let Err(err_msg) = setup_database_and_sidecar(app) {
-                if let Ok(mut home) = app.path().home_dir() {
-                    home.push("rhelo_boot_error.log");
-                    let log_content = format!("Boot Error: {}\n", err_msg);
-                    let _ = std::fs::write(home, log_content);
+            let database_path = prepare_database(app).map_err(std::io::Error::other)?;
+            app.manage(DatabaseState {
+                path: database_path.clone(),
+            });
+
+            let sidecar_child = match spawn_sidecar(app, &database_path) {
+                Ok(child) => child,
+                Err(err_msg) => {
+                    if let Ok(mut home) = app.path().home_dir() {
+                        home.push("rhelo_boot_error.log");
+                        let log_content = format!("Boot Error: {}\n", err_msg);
+                        let _ = std::fs::write(home, log_content);
+                    }
+                    return Err(std::io::Error::other(err_msg).into());
                 }
+            };
+            app.manage(SidecarState {
+                child: Mutex::new(Some(sidecar_child)),
+            });
+
+            if let Ok(mut home) = app.path().home_dir() {
+                home.push("rhelo_boot_error.log");
+                let _ = std::fs::remove_file(home);
             }
 
             // 1. Initialize native TTS and manage it in Tauri State
             if let Ok(tts_instance) = Tts::default() {
-                if let Ok(voices) = tts_instance.voices() {
-                    let mut log_content = String::from("=== System TTS Voices ===\n");
-                    for v in &voices {
-                        log_content.push_str(&format!(
-                            "Name: {}, Language: {}\n",
-                            v.name(),
-                            v.language()
-                        ));
-                    }
-                    let _ = std::fs::write("../../tts_voices.log", log_content);
-                }
                 app.manage(Mutex::new(tts_instance));
             } else {
                 // Fallback if system speech init fails
@@ -198,31 +451,68 @@ pub fn run() {
             let model_path = app
                 .path()
                 .resolve("ggml-base.bin", tauri::path::BaseDirectory::Resource);
-            let whisper_ctx = if let Ok(path) = model_path {
-                if path.exists() {
-                    WhisperContext::new_with_params(
-                        &path.to_string_lossy(),
-                        WhisperContextParameters::default(),
-                    )
-                    .ok()
-                } else {
-                    None
-                }
-            } else {
-                None
+            let (whisper_ctx, initialization_error) = match model_path {
+                Ok(path) if path.exists() => match WhisperContext::new_with_params(
+                    &path.to_string_lossy(),
+                    WhisperContextParameters::default(),
+                ) {
+                    Ok(context) => (Some(context), None),
+                    Err(error) => (
+                        None,
+                        Some(format!(
+                            "Failed to load Whisper model at {:?}: {:?}",
+                            path, error
+                        )),
+                    ),
+                },
+                Ok(path) => (
+                    None,
+                    Some(format!(
+                        "Whisper model resource was not found at {:?}",
+                        path
+                    )),
+                ),
+                Err(error) => (
+                    None,
+                    Some(format!(
+                        "Failed to resolve Whisper model resource: {}",
+                        error
+                    )),
+                ),
             };
 
             app.manage(WhisperModelState {
                 context: Mutex::new(whisper_ctx),
+                initialization_error,
             });
+
+            if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+                window.set_focus()?;
+            }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            fetch_sessions,
+            create_session,
+            update_session,
+            delete_session,
             speak_text,
             stop_speech,
             transcribe_audio
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(sidecar) = app_handle.try_state::<SidecarState>() {
+                    if let Ok(mut child) = sidecar.child.lock() {
+                        if let Some(child) = child.take() {
+                            let _ = child.kill();
+                        }
+                    }
+                }
+            }
+        });
 }

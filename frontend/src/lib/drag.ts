@@ -19,7 +19,7 @@ export function setGlassDragImage(e: any, text: string) {
   el.style.color = "#1e293b";
   el.style.fontSize = "12px";
   el.style.fontWeight = "600";
-  el.style.fontFamily = "var(--font-outfit), system-ui, -apple-system, sans-serif";
+  el.style.fontFamily = "var(--font-sans), system-ui, -apple-system, sans-serif";
   el.style.whiteSpace = "nowrap";
   el.style.pointerEvents = "none";
   el.style.display = "inline-flex";
@@ -40,10 +40,10 @@ export function setGlassDragImage(e: any, text: string) {
   // Set the drag image offset slightly to follow the cursor nicely
   e.dataTransfer.setDragImage(el, 20, 20);
 
-  // Remove the element immediately on the next tick so it doesn't pollute the DOM
-  setTimeout(() => {
+  // Keep the drag image mounted for the full WebKit drag session.
+  window.addEventListener("dragend", () => {
     if (document.body.contains(el)) {
       document.body.removeChild(el);
     }
-  }, 0);
+  }, { once: true });
 }

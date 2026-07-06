@@ -556,7 +556,6 @@ export default function GenealogyView({
                       fontSize={11}
                       fontWeight={isCenter || isHighlighted ? "600" : "500"}
                       className="font-sans"
-                      style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                     >
                       {formatNodeName(node.name)}
                     </text>
@@ -570,7 +569,6 @@ export default function GenealogyView({
                         fill="#94a3b8"
                         fontSize={9}
                         className="font-sans lowercase font-medium"
-                        style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                       >
                         {[
                           node.childrenCount > 0 ? `ch: ${node.childrenCount}` : "",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
+import { useState, useEffect, type ReactNode } from "react";
+import { Loader2, MapPin, Volume2, ChevronDown, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
 import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
 import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 import { getBookName } from "@/lib/books";
@@ -98,6 +98,28 @@ interface StudyPaneProps {
   onVerseClick?: (verseId: string) => void;
   initialTab?: "verse" | "lexicon";
   initialLexiconWord?: string | null;
+}
+
+function CollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="mb-3 flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left text-xs font-bold uppercase tracking-wider text-slate-500 transition-colors hover:text-slate-800"
+        aria-expanded={open}
+      >
+        <span>{title}</span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 transition-transform duration-200 ${open ? "rotate-0" : "-rotate-90"}`}
+        />
+      </button>
+      {open && children}
+    </section>
+  );
 }
 
 // Transliteration Helpers
@@ -297,7 +319,13 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     // Set glassmorphic drag visual feedback
     setGlassDragImage(e, `${id}`);
 
-    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: id, verseText: text } });
+    const dragEvent = new CustomEvent("rhelo-drag-start", {
+      detail: {
+        verseId: id,
+        verseText: text,
+        payload: { verseId: id, translations: [{ label: "Reference", text }] },
+      },
+    });
     window.dispatchEvent(dragEvent);
   };
 
@@ -534,10 +562,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
 
             {/* Commentary */}
             {verseData.commentaries.length > 0 ? (
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-2.5 text-slate-500 font-sans">
-                  Matthew Henry Commentary
-                </h4>
+              <CollapsibleSection title="Matthew Henry Commentary">
                 {verseData.commentaries.map((c, i) => (
                   <p
                     key={i}
@@ -549,7 +574,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                     {c.text}
                   </p>
                 ))}
-              </div>
+              </CollapsibleSection>
             ) : (
               <div className="text-sm italic p-4 text-center text-slate-500 border border-slate-100 rounded-xl">
                 No commentaries available for this verse.
@@ -558,10 +583,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
 
             {/* Cross References */}
             {verseData.cross_references.length > 0 && (
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                  Theological Cross References
-                </h4>
+              <CollapsibleSection title="Theological Cross References">
                 <div className="flex flex-col gap-3">
                   {verseData.cross_references.map((cr) => (
                     <div
@@ -588,15 +610,12 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                     </div>
                   ))}
                 </div>
-              </div>
+              </CollapsibleSection>
             )}
 
             {/* Places */}
             {verseData.places.length > 0 && (
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                  Geocoded Locations
-                </h4>
+              <CollapsibleSection title="Geocoded Locations">
                 <div className="flex flex-col gap-2">
                   {verseData.places.map((p, i) => (
                     <div
@@ -614,19 +633,23 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                     </div>
                   ))}
                 </div>
-              </div>
+              </CollapsibleSection>
             )}
 
             {/* Timeline Events */}
             {verseData.events.length > 0 && (
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-slate-500 font-sans">
-                  Chronological Events
-                </h4>
+              <CollapsibleSection title="Chronological Events">
                 {verseData.events.map((e, i) => (
                   <div
                     key={i}
-                    className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs mb-3"
+                    draggable
+                    onDragStart={(event) => handleStudyPaneDragStart(
+                      event,
+                      `[TIMELINE] ${e.title} (${verseId})`,
+                      `Year ${e.year < 0 ? `${Math.abs(e.year)} BC` : `AD ${e.year}`} · ${e.location}${e.description ? `: ${e.description}` : ""}`,
+                    )}
+                    onDragEnd={handleStudyPaneDragEnd}
+                    className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs mb-3 cursor-grab active:cursor-grabbing hover:border-blue-200 hover:bg-blue-50/30 transition-colors"
                   >
                     <div className="text-sm font-bold text-slate-900 font-sans">{e.title}</div>
                     <div className="text-[11px] text-blue-600 font-bold mt-1 font-sans">
@@ -637,7 +660,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                     )}
                   </div>
                 ))}
-              </div>
+              </CollapsibleSection>
             )}
           </div>
         )}
@@ -686,10 +709,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
             </div>
 
             {/* Definitions */}
-            <div>
-              <h3 className="text-sm font-bold font-sans text-slate-900 mb-3">
-                Strong&apos;s Definitions
-              </h3>
+            <CollapsibleSection title="Strong's Definitions">
               {lexiconLoading ? (
                 <div className="flex items-center justify-center h-20">
                   <Loader2 size={20} className="animate-spin text-blue-500" />
@@ -725,13 +745,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   No Strong&apos;s definitions found.
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
 
             {/* Occurrences */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-sans">
-                Occurrences in Scripture
-              </h4>
+            <CollapsibleSection title="Occurrences in Scripture">
               {occurrencesLoading ? (
                 <div className="flex items-center justify-center py-6">
                   <Loader2 size={16} className="animate-spin text-slate-400" />
@@ -759,7 +776,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   No other occurrences found.
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
           </div>
         )}
 

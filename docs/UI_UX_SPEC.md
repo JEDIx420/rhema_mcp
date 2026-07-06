@@ -1,178 +1,114 @@
-# Rhelo UI/UX Specification & Design System Manual
+# Rhelo interface specification
 
-This document serves as the comprehensive design and interactive behavior manual for building the Rhelo front-end application (Next.js / Tauri / Docker Web).
+This document describes the interface implemented in `frontend/src`, not a future mockup. The same statically exported React application runs in a browser, behind the Docker Nginx image, and inside Tauri.
 
----
+## Visual system
 
-## 🎨 1. Design System & Style Tokens (zenrev aesthetics)
+Rhelo uses a restrained light workspace: slate surfaces and borders, white content panes, royal-blue active states, sky/indigo secondary accents, and compact rounded controls. Tokens live in `src/app/globals.css`.
 
-### CSS Variables & HSL Theme (Sleek High-Contrast Light/Soft Base)
-```css
-:root {
-  /* HSL Tailored Palettes - Sleek Command Center White/Slate Light Mode Base */
-  --bg-base: #f8fafc;                   /* Slate-50 background */
-  --bg-surface: #ffffff;               /* Crisp pure white for cards, sidebars, panes */
-  --bg-surface-elevated: #ffffff;      /* Modal popovers, hover cards */
-  
-  --border-subtle: #e2e8f0;            /* Slate-200 dividers and borders */
-  --border-hover: #cbd5e1;             /* Slate-300 active hover borders */
-  --border-focus: rgba(37, 99, 235, 0.5); /* Royal Blue focus glow */
-  
-  --primary: #2563eb;                  /* Royal Blue - Active states, highlight borders */
-  --primary-hover: #1d4ed8;            /* Deep Blue */
-  --secondary: #0ea5e9;                /* Sky Blue - secondary buttons, location badges */
-  --accent: #7c3aed;                   /* Purple - Lexicon codes, Strong's indexes */
-  
-  --text-primary: #0f172a;             /* Slate-900 for high-readability headings */
-  --text-secondary: #334155;           /* Slate-700 for main prose and body text */
-  --text-muted: #64748b;               /* Slate-500 for captions, labels, subtitles */
-  
-  /* Glassmorphism settings */
-  --glass-blur: blur(16px);
-  --glass-opacity: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(15, 23, 42, 0.06);
-}
-```
+| Token | Current value/use |
+|---|---|
+| `--bg-base` | `#f8fafc`, application background |
+| `--bg-surface` | `#ffffff`, cards and panes |
+| `--border-subtle` | `#e2e8f0`, divisions and inactive borders |
+| `--primary` | `#2563eb`, selected navigation/actions |
+| `--primary-hover` | `#1d4ed8`, active hover |
+| `--secondary` | `#0ea5e9`, secondary emphasis |
+| `--accent` | `#4f46e5`, lexical/indigo accents |
+| `--text-primary` | `#0f172a`, headings |
+| `--text-muted` | `#64748b`, metadata |
 
-### Typography Settings
-*   **Interface Controls**: `font-family: var(--font-outfit), sans-serif;` (weights: 400 Medium, 600 SemiBold, 800 ExtraBold). Used for headings, nav items, and action buttons.
-*   **Scripture Columns**: `font-family: var(--font-inter), sans-serif;` (weights: 400 Regular, 500 Medium). Default base size starts at `17px` with a line-height of `1.75` for high-density, comfortable reading.
-*   **Hebrew/Greek scripts**: `font-family: 'SBL Hebrew', 'SBL Greek', 'Noto Serif Hebrew', serif;` with appropriate right-to-left direction properties for WLC Hebrew text.
+Interface typography uses the system stack headed by Avenir Next/Segoe UI. Reading prose uses Inter/Noto Sans when installed and falls back to system fonts. No web font download is required. Source-language runs use script-appropriate browser/system fallbacks and Hebrew is rendered right-to-left where applicable.
 
----
+## Application frame and navigation
 
-## 🖥️ 2. Screen Anatomy & Layout Framework
+The application fills the viewport and prevents body scrolling; each view manages its own scroll region. The left sidebar is 72 px collapsed and expands to 240 px on hover. It contains:
 
-The application is structured into a persistent sidebar navigation and a primary dynamic workspace main panel.
+1. Read
+2. Search
+3. Maps
+4. Timeline
+5. People
+6. Dictionary
+7. Sessions
+8. MCP
+9. Settings, pinned to the bottom
 
-```
-+---------------------------------------------------------------------------------------------------------------+
-| [SB]   |  [Reading Desk Top Bar: Prev/Next Chapter | Book Chapter Selector Modal Button | Translation Pills]  |
-| H-16   |------------------------------------------------------------------------------------------------------|
-| logo   |  [Interlinear Reading Desk - Verses Columns]                                                         |
-| ------ |  +-------------------------+-------------------------+-------------------------+---------------------+
-| [Read] |  | Column 1: English (KJV)  | Column 2: Original Grk  | Column 3: Hindi         | Col 4: Malayalam    |
-| [Srch] |  | [GEN.1.1] In the        | [GEN.1.1] בְּרֵאשִׁ֖ית  | आदि में परमेश्वर ने     | ആദിയിൽ ദൈവം ആകാശവും |
-| [Maps] |  | beginning...            | בָּרָ֣א אֱלֹהִ֑ים...     |                         |                     |
-| [Time] |  +-------------------------+-------------------------+-------------------------+---------------------+
-| [Peop] |  [Exegesis Slide-out Drawer: Selected Verse Details | Commentary Paragraphs | Cross-References]      |
-| [Dict] |                                                                                                      |
-+--------+------------------------------------------------------------------------------------------------------+
-```
+The Rhelo logo and label appear at the top. Active views use a blue-tinted background and a blue left indicator. `AppViewRouter.tsx` is the single mapping between navigation IDs and feature views.
 
-### Screen 1: Persistent Sidebar (SB)
-*   **Visual Behavior**: Uses Framer Motion to animate dynamically between a collapsed width of `64px` and an expanded width of `220px` when hovered.
-*   **Spacings & Alignment**:
-    *   **Collapsed State**: Icons are perfectly centered (`justify-center px-0 py-3`) within the `64px` column to eliminate off-center alignment.
-    *   **Expanded State**: Icons align left alongside text labels (`justify-start px-3.5 gap-3.5 py-3`) for a structured look.
-*   **Buttons (Top to Bottom)**:
-    1.  `Brand Header`: Shows the `/rhelologo.png` graphic inside the logo container pill and the brand title `rhelo` strictly aligned to the 64px/h-16 header line.
-    2.  `Read`: Navigates to interlinear Scripture reading columns.
-    3.  `Search`: Accesses Scripture full-text keyword indexing pane.
-    4.  `Maps`: Opens GIS ancient geography location visualizer.
-    5.  `Timeline`: Traces historical events with visual chronological scrollers.
-    6.  `People`: Focuses on biographical relationships and SVG pedigree tree maps.
-    7.  `Dictionary`: Combined Easton's, Smith's, Hitchcock's, and Nave's topical search desks.
-    8.  `Settings`: Aligned to the bottom footer; manages servers and translation states.
+`Cmd+K` on macOS or `Ctrl+K` elsewhere opens the command center. It supports quick navigation/search patterns for reading, finding scripture, dictionary terms, and biographies.
 
----
+## Book, chapter, and English edition modal
 
-## 📖 3. Detailed Page-by-Page Components
+`BookChapterPickerModal.tsx` is shared by reading and mapping contexts. It is a centered, scrollable modal over a dimmed backdrop and has two top tabs:
 
-### A. The Interlinear Reading Desk (`ReadingDesk.tsx`)
-The primary interlinear alignment station, displaying scriptures in side-by-side translation columns:
-1.  **Top Header Bar**:
-    *   `Prev/Next Chapter Buttons`: Chevron left/right arrows that dynamically transition between books using exact chapter counts and disable boundaries on Genesis 1 and Revelation 22.
-    *   `Book Selector Button`: Displays `[BookName] [ChapterNumber]` (e.g. *Genesis 1*) as a clickable pill button with `BookOpen` and `ChevronDown` icons. Triggers the [BookChapterPickerModal](file:///Users/vincyvincent/rhema_mcp/frontend/src/components/BookChapterPickerModal.tsx).
-    *   `Text Sizer Widget`: Offers `-` / `+` font scaling options. Default sizing initialized at `17px` for enhanced legibility.
-    *   `Translation Pills`: Staggered flex buttons (`gap-2.5`) corresponding to English, Original (Hebrew/Greek), Hindi, Telugu, Malayalam, and Tamil translations. Active states show as solid blue text with a soft blue backdrop (`rgba(37, 99, 235, 0.08)`).
-2.  **Verses Pane**:
-    *   `Multilingual Columns Grid`: Dynamically fits columns based on the enabled translations count.
-    *   `Bidirectional Highlights (Vowel-Tolerant)`: Clicking or hovering over an English word automatically highlights the corresponding Hebrew/Greek word in the Original column. Employs a custom consonantal root extraction algorithm (`stripVowels()`) to bypass spelling differences and grammatical prefixes (`w`, `h`, `b`, `l`, `k`, `m`), yielding instant matching.
-    *   `Original Lexicon Click Modal`: Clicking an original Hebrew or Greek word opens a detailed popover modal containing Strongs ID, Lemma, and phonetic pronunciation guide (e.g., *Pronunciation: tehom*), plus un-truncated definitions in a scrollable card.
-3.  **Exegesis Drawer (Right Panel)**:
-    *   Slides out on verse select. Integrates the unified `<StudyPane />` component, exposing Lexicon, Commentary, Geography maps, timelines, and cross-references. Features full verse occurrences navigation which redirects the main Reading Desk chapter coordinates and syncs view coordinates automatically.
+- **Book & chapter** shows Old and New Testament book grids. Selecting a book opens its exact chapter grid; selecting a chapter applies the choice and closes the modal.
+- **Translation** lists Berean Standard Bible, World English Bible, and King James Version as full-name cards with descriptions and a selected check state.
 
----
+The edition choice is global and persisted locally. It updates English content in Read, Search, verse study, map/route cards, cross-references, and lexicon occurrences without changing enabled Indic columns.
 
-### B. Book & Chapter Picker Modal (`BookChapterPickerModal.tsx`)
-A centered, focus-stealing overlay replacing cramped inline dropdown menus:
-*   **Modal Overlay**: Features a semi-transparent slate backdrop (`bg-slate-900/40`) with high-fidelity blur (`backdrop-blur-xs`) and an absolute depth of `z-[9999]` to render above external Leaflet GIS map panes.
-*   **Book Picker Screen**: Displays Old Testament and New Testament books segmented in a responsive 4-column grid. Currently active books show a soft blue highlight border.
-*   **Chapter Selector Screen**: Clicking any book transitions the modal into a grid of chapters (e.g., chapters 1-50 for Genesis) using exact scripture counts. Features a `ChevronLeft` back trigger to return to the book grid.
+## Read workspace
 
----
+`ReadingDesk.tsx` provides chapter navigation, book/chapter selection, font sizing, translation-column controls, and a verse-by-verse aligned grid.
 
-### C. GIS Geography Map View (`MapView.tsx`)
-An interactive geographical interface displaying historical places mentioned in scripture:
-*   **Context Tabs**: Added toggle tabs at the top of the sidebar control:
-    *   `Chapter Atlas`: Displays geocoded places mapped to the current reading context.
-    *   `Biblical Routes`: Allows selecting sequential historical routes (e.g. Abraham's Journey, the Exodus Journey, or Paul's Missionary Travels).
-*   **Sidebar Control**: Features a clickable header banner: `Current Context: [Book] [Chapter]`. Clicking the banner opens the `BookChapterPickerModal`, enabling direct chapter navigation within the Maps view.
-*   **Places List Panel**: Enumerates all geocoded places mapped to the current chapter/route. Hovering/clicking a place name auto-centers the Leaflet map onto its coordinates.
-*   **Leaflet Map Canvas & Journey Paths**:
-    *   Features a full-screen geographical layer. Mapped pins drop into coordinates with dynamic spring animations. Floating tooltips render corresponding verse references on hover.
-    *   When a route is active, a sequential path is drawn connecting journey points using a custom `var(--primary)` dashed stroke polyline (`<Polyline>`) that matches the zenrev command center aesthetic.
+- English is labeled with the active edition name.
+- Hebrew/Greek, Hindi, Telugu, Malayalam, and Tamil columns can be enabled independently.
+- Clicking source-language words opens lexical details; morphology and normalized-script matching synchronize word emphasis across columns where data permits.
+- A selected verse opens the study drawer with verse context, lexicon, commentary, geography, chronology, cross-references, and session tools.
+- Individual verses are draggable. The payload contains each visible translation separately rather than concatenating display text.
+- English and Hebrew/Greek show TTS controls. Hindi, Telugu, Malayalam, and Tamil intentionally do not.
+- Chapter playback is available only for currently enabled speakable columns.
 
----
+## Structured drag and drop
 
-### D. Chronological Timeline View (`TimelineView.tsx`)
-A visual historical dashboard charting events across scripture:
-*   **Horizontal Visual Track**: A scrollable horizontal track representing timeline events. Each event displays as a visual circular dot connected by a continuous horizontal rule.
-*   **Milestone Bubbles**: Displays floating, colored year tags (e.g. *2000 BC*) above event nodes, and event titles and locations below.
-*   **2-Column Lower Dashboard**:
-    *   **Left Details Column (60% width)**: Renders a card displaying the selected event's title, location, narrative description, and a flex list of clickable scripture references. Clicking any reference navigates the user back to the Reading Desk at that verse.
-    *   **Right Chronology Checklist (40% width)**: A scrollable, vertical list of all events sorted chronologically, serving as an index to quickly select and focus milestones.
+Research items from Read, Search, Maps, Timeline, Dictionary, and the study pane dispatch `rhelo-drag-start`/`rhelo-drag-end` events. While dragging, a floating target appears near the lower-right corner and can append the item to a selected/recent session.
 
----
+Scripture drag payloads use `application/json-verses`. `src/lib/verseDrop.ts` renders the reference and each translation as its own paragraph, so English, Hebrew/Greek, and every enabled Indic language remain on separate lines in the session editor. Plain-text drag data remains as a compatibility fallback for other cards.
 
-### E. Genealogical Lineage View (`GenealogyView.tsx`)
-Renders interactive biographical relationship nodes:
-*   **Left Sidebar Biography**: Features a prominent input box to search characters (e.g. *David*). Displays name meanings, gender, tribal lineages, attributes, and biography notes.
-*   **Right SVG Graph Canvas**: Renders family relationship maps with a clean, minimalist dot-grid canvas pattern background.
-*   **Nodes Architecture**: Renders compact, highly rounded `110x30` pill shapes (`rounded-full` / `rx={15}`) with clean Outfit-based lowercase typography (`text-xs font-medium lowercase` configuration format).
-*   **Orthogonal Step Edges**: Connects generations using strict 90-degree horizontal and vertical step lines (equivalent to smoothstep/orthogonal edges) rather than loose diagonal curves.
-*   **Palette Highlights**: Employs a subtle slate-gray stroke (`#e2e8f0`) for default inactive connection lines, and the application's primary blue accent (`#3b82f6`) strictly for active highlighted paths connected to the selected individual. All inactive nodes are rendered in grayscale.
-*   **Spouses**: Staggered vertically on alternating offsets to prevent collision with children.
-*   **Children**: Arranged along a bottom row using a dynamic step-width calculation (`Math.min(110, 480 / (count - 1))`) that fits all children on-screen without canvas overflows.
+## Search and study pane
 
----
+`SearchView.tsx` combines scripture FTS results with a persistent `StudyPane`.
 
-### F. Search Scriptures View (`SearchView.tsx`)
-A dual-pane research center integrating fast queries and instant exegesis:
-*   **Split-Pane Grid**: Spans the full screen width using a `grid grid-cols-1 md:grid-cols-12` layout.
-*   **Left Column (Search & Results - col-span-5)**: 
-    *   **Header Box**: Centers the search input bar inside a prominent card container with dropshadows.
-    *   **Filter Row**: Provides sorting (Relevance / Chronological) and dynamic Book and Testament dropdown filters. These dropdown options query the backend matches list and automatically constrain themselves to only list books and testaments containing results matching the query context.
-    *   **Results Panel**: Scrollable search list displaying paginated matching cards (50 per page). Clicking a card selects the verse. Clicking the navigation arrow jumps the user directly to that verse in the Reading Desk.
-*   **Right Column (Study Pane - col-span-7)**: Embeds the unified `<StudyPane />` component, loading the selected search result details immediately for context-rich study without losing search results.
+- Results use the active English edition.
+- Optional book and testament filters are derived from the unfiltered match set.
+- Results can sort by FTS relevance or canonical scripture order and paginate at 50 per page by default.
+- Selecting a result loads its context; navigation jumps back to the precise reading location.
 
----
+`StudyPane.tsx` has Verse, Lexicon, and Sessions tabs. It centralizes selected-verse material, source-word definitions/occurrences, draggable commentary, cross-reference, and chronological-event cards, session switching, and quick note appending. Research sections use compact heading arrows so commentary, references, locations, events, definitions, and occurrences can be expanded or collapsed independently.
 
-### G. Interactive "Sessions" Note Workspace (`SessionsView.tsx`)
-A split-pane research note manager integrating rich text composition, voice transcribing, and drag-and-drop scripture quoting:
-*   **Left Panel (Sessions Browser)**: Lists saved study logs displaying titles and formatted modification timestamps, filtered in real-time by a search input using FTS5 virtual indexing. Features an improved layout that fixes nested button hydration console errors by converting card items to standard pointer divs.
-*   **Right Panel (TipTap Editor)**: Renders a spacious rich-text canvas using TipTap styled with custom typography, auto-saving modifications to the database after 1.5s of inactivity.
-*   **Compile to PDF Action**: Exports note documents to beautiful PDFs compiled by ReportLab flowables, downloading the file automatically.
-*   **Drag-to-Save Dropzone**: Verses from the Reading Desk, geographical locations, search results, timeline milestones, dictionary results, and commentary entries can be dragged directly into the editor pane, rendering a custom-styled quote block or structured observation card.
+## Maps, timeline, and people
 
----
+- **Maps** uses a Leaflet canvas with a chapter-atlas tab and biblical-routes tab. Place/route cards include active-edition English and original text where linked, and may include name meaning, commentary, and dictionary material.
+- **Timeline** presents events in chronological order, with a visual track, selected-event detail, linked scripture references, and draggable event cards.
+- **People** searches the local people dataset and renders profile/name information plus an interactive SVG relationship graph. The canvas supports pan/zoom-like interaction and direct navigation from verse references.
 
-### H. Multi-State Floating Overlays & Workspace Router (`page.tsx`)
-Global overlays positioned with absolute layouts over the viewports:
-*   **Magnetic Drop Zone**: During dragging of any study element (verses, locations, dictionary terms, search cards, commentaries, timeline milestones), a glassmorphic target appears in the bottom right corner. Dropping the element here immediately appends a formatted quote block to the latest study session.
-*   **Listening Pill Waveform**: During STT microphone recording, a dark glassmorphic badge appears in the top corner featuring a looping height-animated audio waveform.
-*   **Floating Mic Button**: A floating circle button in the bottom right corner of the screen toggles STT speech dictation start/stop. Displays an elegant hover tooltip/label detailing the action context.
+## Dictionary workspace
 
----
+`DictionaryView.tsx` searches three local indexes in one screen: Strong's lexicon, the combined Easton's/Smith's dictionary, and Nave's topics. Cards are draggable into sessions. Dictionary speech uses the shared browser/Tauri speech bridge and therefore follows the English-only portion of the TTS policy.
 
-### I. Exegesis Drawer Sessions Integration (`StudyPane.tsx`)
-*   **Sessions Tab**: A dedicated study tab displaying a switcher dropdown to toggle between active sessions, a "+ Create" input field to instantiate logs instantly, a read-only live HTML preview of the active session's contents, and a bottom text input box to quickly type and append exegesis observations.
-*   **Broad Drag Support**: Matthew Henry commentaries, voters cross-references, and lexicon concordance occurrence cards are draggable, allowing users to drop them into the TipTap Editor or the Magnetic Drop Zone.
+## Sessions workspace
 
----
+`SessionsView.tsx` is a two-pane local note environment:
 
-### J. Command Center Launcher (`CommandCenter.tsx`)
-*   **Input Trigger**: Activated via `Cmd+K` or `Ctrl+K` globally.
-*   **Backdrop**: Backdrop blur overlay spanning the whole viewport.
-*   **Syntax Actions**: Matches `/read [ref]`, `/find [keyword]`, `/dict [term]`, and `/bio [person]` inputs to instantly trigger corresponding state transitions in the main views.
+- The left pane creates, selects, deletes, and FTS-filters sessions.
+- The right pane uses TipTap rich text with headings, font sizing, emphasis, alignment, lists, quotes, undo, and redo.
+- Content auto-saves after 1.5 seconds of inactivity.
+- Dropped multilingual verses retain one paragraph per language.
+- PDF export posts the HTML to the Python backend, which writes a ReportLab document beside the active database and returns a download path.
+
+The global microphone records in Tauri through Whisper or falls back to browser `SpeechRecognition` when available. Transcribed text is shown in a review dialog, then appended to a chosen session with a date header and timestamp. Recording never bypasses the review step.
+
+## MCP and settings
+
+The MCP page tests the configurable HTTP companion endpoint, shows the eight MCP tool names, and generates/copies client JSON. Browser mode cannot control local processes; Tauri launches its bundled HTTP sidecar.
+
+Settings displays database-backed content counts, data/source attribution, and the active Rhelo color system. It is informational; English edition selection lives in the shared scripture modal.
+
+## Responsive and accessibility behavior
+
+- Feature grids collapse at Tailwind breakpoints, and the scripture modal changes from two to three columns for books and five to seven for chapters.
+- Buttons use native elements, labels/titles, focusable controls, and selected tab semantics in the modal.
+- Hebrew direction and source-script sizing are handled separately from Latin/Indic prose.
+- Motion is short and functional: sidebar expansion, modal entry, active indicators, and drag/listening feedback.
+
+Known limitation: the experience is optimized for desktop-sized workspaces. Mobile layout is partially responsive but dense research views and the hover-expanding sidebar need a dedicated touch-navigation design before calling the web UI fully mobile-ready.

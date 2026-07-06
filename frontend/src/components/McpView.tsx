@@ -14,7 +14,7 @@ export default function McpView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [desktop, setDesktop] = useState(false);
+  const [desktop, setDesktop] = useState(() => isTauriRuntime());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -77,11 +77,17 @@ export default function McpView() {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 font-mono text-sm outline-none focus:border-blue-500" aria-label="Rhelo API endpoint" />
-              <button onClick={saveAndTest} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">Save & test</button>
-            </div>
-            {error && <p className="mt-3 text-sm text-red-600">{error}. Start the local Rhelo backend, then test again.</p>}
+            {desktop ? (
+              <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+                The local study service is managed automatically by Rhelo.
+              </div>
+            ) : (
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 font-mono text-sm outline-none focus:border-blue-500" aria-label="Rhelo API endpoint" />
+                <button onClick={saveAndTest} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">Save & test</button>
+              </div>
+            )}
+            {error && <p className="mt-3 text-sm text-red-600">{desktop ? "Rhelo could not start its local study service. Quit and reopen the app." : `${error}. Start the local Rhelo backend, then test again.`}</p>}
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2">

@@ -75,14 +75,25 @@ def main():
                 INSERT OR REPLACE INTO sessions (session_id, title, content)
                 VALUES (?, ?, ?)
             """, (welcome_id, welcome_title, welcome_content))
-            
-            # Seed FTS too (since trigger only fires on normal SQL inserts, we seed FTS manually for the initial seed data)
-            cursor.execute("""
-                INSERT OR REPLACE INTO sessions_fts (session_id, title, content)
-                VALUES (?, ?, ?)
-            """, (welcome_id, welcome_title, welcome_content))
             conn.commit()
             print("Welcome session seeded successfully.")
+
+        # Repair the pre-rebrand seed title without changing user-created sessions.
+        cursor.execute("""
+            UPDATE sessions
+            SET title = 'Welcome to Rhelo Study Workspace'
+            WHERE session_id = 'welcome_session_001'
+              AND title = 'Welcome to Targum Study Workspace'
+        """)
+
+        # Rebuild the contentless FTS index so rerunning this migration is
+        # deterministic and historical duplicate seed rows are removed.
+        cursor.execute("DELETE FROM sessions_fts")
+        cursor.execute("""
+            INSERT INTO sessions_fts (session_id, title, content)
+            SELECT session_id, title, content FROM sessions
+        """)
+        conn.commit()
         
         print("Sessions schema migration completed successfully.")
     except Exception as e:

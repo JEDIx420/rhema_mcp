@@ -110,7 +110,7 @@
 /* Leaflet light theme adjustments */
 .leaflet-container {
   background: #f1f5f9 !important;
-  font-family: var(--font-inter), sans-serif !important;
+  font-family: var(--font-prose), sans-serif !important;
 }
 .leaflet-popup-content-wrapper {
   background: rgba(255, 255, 255, 0.96) !important;

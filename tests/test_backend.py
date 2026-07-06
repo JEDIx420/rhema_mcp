@@ -19,6 +19,12 @@ class BackendContractTests(unittest.TestCase):
         self.assertIn("search_scriptures", TOOL_NAMES)
         self.assertIn("get_verse_details", TOOL_NAMES)
 
+    def test_mcp_tools_have_client_descriptions(self) -> None:
+        for tool_name in TOOL_NAMES:
+            with self.subTest(tool=tool_name):
+                tool = getattr(mcp_service, tool_name)
+                self.assertTrue(tool.__doc__ and tool.__doc__.strip())
+
     @unittest.skipUnless(database_is_ready(), "rhelo.db is not available")
     def test_scripture_search_contract(self) -> None:
         result = mcp_service.search_scriptures("beginning", "GEN")
