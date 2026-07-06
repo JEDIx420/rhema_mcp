@@ -13,7 +13,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "targum — bible study engine",
+  title: "rhelo — bible study engine",
   description: "A high-fidelity, local-first Bible study search engine and exegesis machine.",
 };
 

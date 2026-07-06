@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Targum",
+  "productName": "Rhelo",
   "version": "0.1.0",
-  "identifier": "com.targum.bible",
+  "identifier": "com.rhelo.app",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Targum Study Engine",
+        "title": "Rhelo Study Engine",
         "width": 800,
         "height": 600,
         "resizable": true,
@@ -34,7 +34,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../../targum.db"
+      "../../rhelo.db",
+      "../../ggml-base.bin"
     ],
     "externalBin": [
       "binaries/server"

@@ -99,3 +99,21 @@ graph TD
 *   **14.3 TipTap Rich Text Editor [COMPLETED]:** Built TipTap rich-text canvas in `SessionsView.tsx` with drag-and-drop scripture quoting.
 *   **14.4 Sessions Directory (Sidebar) [COMPLETED]:** Integrated a `sessions` tab in Sidebar navigation.
 *   **14.5 PDF Pipeline [COMPLETED]:** Built backend HTML to PDF compiler using Python's `reportlab` library.
+
+### Phase 26: Sidecar Configurations [COMPLETED]
+**Objective:** Package the python server and sqlite database as resources inside the Tauri wrapper.
+*   **26.1 PyInstaller Integration [COMPLETED]:** Installed pyinstaller and updated the python server to resolve database connections from environment variable `RHEMA_DB_PATH`.
+*   **26.2 Static Export Migration [COMPLETED]:** Configured Next.js for static HTML export (`output: 'export'`) and disabled dynamic image optimizations.
+*   **26.3 Tauri Core & Lifecycle Setup [COMPLETED]:** Initialized Tauri v2, integrated `tauri-plugin-shell`, configured capabilities permission scope, and implemented app data resolver logic in `lib.rs` to clone the database to a writable path on first launch.
+
+### Phase 26.5: Environment Binding & First Desktop Compilation [COMPLETED]
+**Objective:** Stabilize host toolchain dependencies and execute the production macOS `.dmg` compiler pass.
+*   **26.5.1 Toolchain Binding [COMPLETED]:** Verified Rustup ecosystem pathways (`cargo`/`rustc`) for the local workspace runner.
+*   **26.5.2 Asset Mapping Verification [COMPLETED]:** Verified that `frontendDist` properly encapsulates the static standalone production export from Next.js.
+*   **26.5.3 Native Compilation [COMPLETED]:** Ran the production binary compiler to combine the Next.js assets, Rust lifecycle core, and the PyInstaller sidecar into a self-contained installer package.
+
+### Phase 28: Deep Audit, Global Rebranding, and Stabilization [COMPLETED]
+**Objective:** Transition the application name to "targum", clean up stale code blocks, and secure the launch setup process from panics.
+*   **28.1 Global Rebranding (targum):** Updated configurations (`package.json`, `Cargo.toml`, `tauri.conf.json`) and database file path from `rhema.db` to `targum.db`. Rebranded all UI event hooks, headers, metadata, and sidecar bindings to the sleek, lowercase `targum` brand identity.
+*   **28.2 Deep Codebase Audit & Pruning:** Validated that the backend and frontend are pruned of stale LLM structures and models.
+*   **28.3 Safe Initialization Setup:** Rewrote the Tauri Rust startup lifecycles in `lib.rs` to handle copy-on-write actions inside app data using `Result` blocks, avoiding startup abort states (`SIGABRT`) and writing debug trails to `~/targum_boot_error.log` in case of failure.

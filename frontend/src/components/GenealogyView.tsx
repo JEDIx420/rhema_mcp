@@ -6,6 +6,15 @@ import { Compass as CompassIcon, Search as SearchIcon, Users as UsersIcon, Loade
 import { fetchBiography } from "@/lib/api";
 import { getBookName } from "@/lib/books";
 
+const formatNodeName = (name: string) => {
+  if (!name) return "";
+  const cleanName = name.split("_")[0];
+  if (cleanName.toLowerCase() === "yhvh") {
+    return "YHVH";
+  }
+  return cleanName;
+};
+
 interface BioProfile {
   id: string;
   name: string;
@@ -184,7 +193,7 @@ export default function GenealogyView({
     );
 
     const childrenCount = children.length;
-    const stepX = 160; // wider step for readable labels and stats
+    const stepX = 130;
     const totalChildrenWidth = Math.max(0, (childrenCount - 1) * stepX);
     const viewBoxWidth = Math.max(800, totalChildrenWidth + 240);
     const centerX = viewBoxWidth / 2;
@@ -205,8 +214,8 @@ export default function GenealogyView({
     // 1. Father (Top Left)
     if (fathers.length > 0) {
       const f = fathers[0];
-      const fx = centerX - 160;
-      const fy = centerY - 120;
+      const fx = centerX - 120;
+      const fy = centerY - 80;
       nodes.push({
         id: f.relation_id,
         name: f.relation_name,
@@ -221,17 +230,17 @@ export default function GenealogyView({
         from: f.relation_id,
         to: profile.id,
         x1: fx,
-        y1: fy + 22.5,
-        x2: centerX - 25,
-        y2: centerY - 22.5
+        y1: fy + 15,
+        x2: centerX - 20,
+        y2: centerY - 15
       });
     }
 
     // 2. Mother (Top Right)
     if (mothers.length > 0) {
       const m = mothers[0];
-      const mx = centerX + 160;
-      const my = centerY - 120;
+      const mx = centerX + 120;
+      const my = centerY - 80;
       nodes.push({
         id: m.relation_id,
         name: m.relation_name,
@@ -246,17 +255,17 @@ export default function GenealogyView({
         from: m.relation_id,
         to: profile.id,
         x1: mx,
-        y1: my + 22.5,
-        x2: centerX + 25,
-        y2: centerY - 22.5
+        y1: my + 15,
+        x2: centerX + 20,
+        y2: centerY - 15
       });
     }
 
     // 3. Spouses (Right side - staggered)
     spouses.forEach((s, idx) => {
-      const sx = centerX + 200;
+      const sx = centerX + 150;
       const offsetMultiplier = Math.floor((idx + 1) / 2) * (idx % 2 === 0 ? 1 : -1);
-      const sy = centerY + offsetMultiplier * 55;
+      const sy = centerY + offsetMultiplier * 45;
       
       nodes.push({
         id: s.relation_id,
@@ -271,9 +280,9 @@ export default function GenealogyView({
       connections.push({
         from: profile.id,
         to: s.relation_id,
-        x1: centerX + 60,
+        x1: centerX + 55,
         y1: centerY,
-        x2: sx - 60,
+        x2: sx - 55,
         y2: sy,
         isDouble: true
       });
@@ -285,7 +294,7 @@ export default function GenealogyView({
       
       children.forEach((c, idx) => {
         const cx = startX + idx * stepX;
-        const cy = centerY + 140;
+        const cy = centerY + 100;
         nodes.push({
           id: c.relation_id,
           name: c.relation_name,
@@ -301,9 +310,9 @@ export default function GenealogyView({
           from: profile.id,
           to: c.relation_id,
           x1: centerX,
-          y1: centerY + 22.5,
+          y1: centerY + 15,
           x2: cx,
-          y2: cy - 22.5
+          y2: cy - 15
         });
       });
     }
@@ -431,7 +440,7 @@ export default function GenealogyView({
       {/* SVG Canvas for Tree */}
       <div 
         ref={containerRef}
-        className="flex-1 h-full bg-[#f8fafc] relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
+        className="flex-1 h-full bg-[#ffffff] relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -442,39 +451,33 @@ export default function GenealogyView({
           <svg className="w-full h-full">
             {/* Grid Pattern that scales/pans */}
             <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(15, 23, 42, 0.03)" strokeWidth="1" />
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="0.75" fill="rgba(15, 23, 42, 0.08)" />
               </pattern>
-              {/* Highlight path glow filter */}
-              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
 
             <g transform={`translate(${offset.x}, ${offset.y}) scale(${scale})`}>
               {/* Draw Relationship Lines */}
               {treeLayout.connections.map((c, i) => {
-                const midY = (c.y1 + c.y2) / 2;
-                const pathD = `M ${c.x1} ${c.y1} C ${c.x1} ${midY}, ${c.x2} ${midY}, ${c.x2} ${c.y2}`;
                 const isHighlighted = hoveredNodeId === c.from || hoveredNodeId === c.to;
                 const hasHover = hoveredNodeId !== null;
 
+                // Orthogonal 90-degree step path
+                const pathD = c.isDouble
+                  ? `M ${c.x1} ${c.y1} L ${(c.x1 + c.x2) / 2} ${c.y1} L ${(c.x1 + c.x2) / 2} ${c.y2} L ${c.x2} ${c.y2}`
+                  : `M ${c.x1} ${c.y1} L ${c.x1} ${(c.y1 + c.y2) / 2} L ${c.x2} ${(c.y1 + c.y2) / 2} L ${c.x2} ${c.y2}`;
+
                 return (
                   <g key={i}>
-                    {/* Shadow/Glow Line when hovered */}
+                    {/* Shadow/Glow Line when highlighted */}
                     {isHighlighted && (
                       <path
                         d={pathD}
                         fill="none"
                         stroke="#3b82f6"
-                        strokeWidth={6}
-                        opacity={0.3}
-                        filter="url(#glow)"
+                        strokeWidth={4}
+                        opacity={0.2}
                       />
                     )}
                     {/* Main Line */}
@@ -483,34 +486,13 @@ export default function GenealogyView({
                       fill="none"
                       stroke={
                         isHighlighted 
-                          ? "#2563eb" 
-                          : c.isDouble 
-                            ? "rgba(37, 99, 235, 0.3)" 
-                            : "rgba(15, 23, 42, 0.08)"
+                          ? "#3b82f6" 
+                          : "#e2e8f0"
                       }
-                      strokeWidth={isHighlighted ? 2.5 : c.isDouble ? 2 : 1.2}
-                      strokeDasharray={isHighlighted ? "0" : c.isDouble ? "0" : "4 4"}
-                      opacity={hasHover && !isHighlighted ? 0.3 : 1}
+                      strokeWidth={isHighlighted ? 1.5 : 1}
+                      opacity={hasHover && !isHighlighted ? 0.45 : 1}
                       className="transition-all duration-300"
                     />
-                    {/* Flowing animated dash indicator for highlighted parent-child links */}
-                    {isHighlighted && !c.isDouble && (
-                      <path
-                        d={pathD}
-                        fill="none"
-                        stroke="#3b82f6"
-                        strokeWidth={2.5}
-                        strokeDasharray="8 15"
-                        opacity={0.8}
-                      >
-                        <animate
-                          attributeName="stroke-dashoffset"
-                          values="100;0"
-                          dur="3s"
-                          repeatCount="indefinite"
-                        />
-                      </path>
-                    )}
                   </g>
                 );
               })}
@@ -518,7 +500,6 @@ export default function GenealogyView({
               {/* Draw Nodes */}
               {treeLayout.nodes.map((node) => {
                 const isCenter = node.role === "center";
-                const isMaleNode = node.sex === "M";
                 const isHighlighted = hoveredNodeId === node.id;
                 const hasHover = hoveredNodeId !== null;
 
@@ -536,111 +517,67 @@ export default function GenealogyView({
                   >
                     {/* Descendant Dotted Lines spreading downward for cards with children */}
                     {node.role !== "center" && node.childrenCount > 0 && (
-                      <g opacity={0.65}>
-                        <line
-                          x1={node.x}
-                          y1={node.y + 22.5}
-                          x2={node.x}
-                          y2={node.y + 38}
-                          stroke="#64748b"
-                          strokeWidth={1.5}
-                          strokeDasharray="2 2"
-                        />
-                        <path
-                          d={`M ${node.x} ${node.y + 22.5} Q ${node.x - 8} ${node.y + 30}, ${node.x - 14} ${node.y + 36}`}
-                          fill="none"
-                          stroke="#64748b"
-                          strokeWidth={1.5}
-                          strokeDasharray="2 2"
-                        />
-                        <path
-                          d={`M ${node.x} ${node.y + 22.5} Q ${node.x + 8} ${node.y + 30}, ${node.x + 14} ${node.y + 36}`}
-                          fill="none"
-                          stroke="#64748b"
-                          strokeWidth={1.5}
-                          strokeDasharray="2 2"
-                        />
-                      </g>
+                      <line
+                        x1={node.x}
+                        y1={node.y + 15}
+                        x2={node.x}
+                        y2={node.y + 35}
+                        stroke="#cbd5e1"
+                        strokeWidth={1}
+                        strokeDasharray="2 2"
+                      />
                     )}
 
-                    {/* Node Card background */}
+                    {/* Node Pill background */}
                     <rect
-                      x={node.x - 65}
-                      y={node.y - 22.5}
-                      width={130}
-                      height={45}
-                      rx={10}
+                      x={node.x - 55}
+                      y={node.y - 15}
+                      width={110}
+                      height={30}
+                      rx={15}
                       fill="#ffffff"
                       stroke={
                         isHighlighted
                           ? "#2563eb"
                           : isCenter
                             ? "#2563eb"
-                            : isMaleNode
-                              ? "rgba(14, 165, 233, 0.35)"
-                              : "rgba(168, 85, 247, 0.35)"
+                            : "#e2e8f0"
                       }
-                      strokeWidth={isCenter ? 2.5 : isHighlighted ? 2.2 : 1}
-                      className="transition-all duration-200 shadow-xs"
-                      style={{
-                        filter: isHighlighted ? "drop-shadow(0 4px 10px rgba(37, 99, 235, 0.15))" : "none"
-                      }}
+                      strokeWidth={isCenter ? 2 : isHighlighted ? 1.5 : 1}
+                      className="transition-all duration-200"
                     />
 
-                    {/* Gender Indicator Stripe */}
-                    <rect
-                      x={node.x - 65}
-                      y={node.y - 22.5}
-                      width={4}
-                      height={45}
-                      rx={2}
-                      fill={
-                        isCenter
-                          ? "#f59e0b"
-                          : isMaleNode
-                            ? "#0ea5e9"
-                            : "#a855f7"
-                      }
-                    />
-
-                    {/* Label */}
+                    {/* Label (proper grammar, capitalized) */}
                     <text
-                      x={node.x + 2}
-                      y={node.y - 2}
+                      x={node.x}
+                      y={node.y + 4}
                       textAnchor="middle"
-                      fill="#0f172a"
+                      fill={isCenter || isHighlighted ? "#1e40af" : "#475569"}
                       fontSize={11}
-                      fontWeight="bold"
+                      fontWeight={isCenter || isHighlighted ? "600" : "500"}
                       className="font-sans"
+                      style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                     >
-                      {node.name}
+                      {formatNodeName(node.name)}
                     </text>
 
-                    {/* Stats pills: Children and Spouses counts */}
-                    <g transform={`translate(${node.x + 2}, ${node.y + 12})`}>
-                      {/* Children count badge */}
-                      {node.childrenCount > 0 && (
-                        <g transform={`translate(${node.spouseCount > 0 ? -18 : 0}, 0)`}>
-                          <text textAnchor="middle" fill="#64748b" fontSize={9} className="font-sans font-semibold">
-                            👶 {node.childrenCount}
-                          </text>
-                        </g>
-                      )}
-                      {/* Spouse count badge */}
-                      {node.spouseCount > 0 && (
-                        <g transform={`translate(${node.childrenCount > 0 ? 18 : 0}, 0)`}>
-                          <text textAnchor="middle" fill="#64748b" fontSize={9} className="font-sans font-semibold">
-                            👥 {node.spouseCount}
-                          </text>
-                        </g>
-                      )}
-                      {/* If both counts are 0, show a small role label */}
-                      {node.childrenCount === 0 && node.spouseCount === 0 && (
-                        <text textAnchor="middle" fill="#94a3b8" fontSize={8} fontWeight="bold" className="font-mono uppercase tracking-wider">
-                          {node.role}
-                        </text>
-                      )}
-                    </g>
+                    {/* Stats pills under node */}
+                    {(node.childrenCount > 0 || node.spouseCount > 0) && (
+                      <text
+                        x={node.x}
+                        y={node.y + 26}
+                        textAnchor="middle"
+                        fill="#94a3b8"
+                        fontSize={9}
+                        className="font-sans lowercase font-medium"
+                        style={{ fontFamily: "var(--font-outfit), sans-serif" }}
+                      >
+                        {[
+                          node.childrenCount > 0 ? `ch: ${node.childrenCount}` : "",
+                          node.spouseCount > 0 ? `sp: ${node.spouseCount}` : ""
+                        ].filter(Boolean).join(" • ")}
+                      </text>
+                    )}
                   </g>
                 );
               })}

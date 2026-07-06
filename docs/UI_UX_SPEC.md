@@ -1,6 +1,6 @@
-# Rhema UI/UX Specification & Design System Manual
+# Rhelo UI/UX Specification & Design System Manual
 
-This document serves as the comprehensive design and interactive behavior manual for building the Rhema front-end application (Next.js / Tauri / Docker Web).
+This document serves as the comprehensive design and interactive behavior manual for building the Rhelo front-end application (Next.js / Tauri / Docker Web).
 
 ---
 
@@ -66,7 +66,7 @@ The application is structured into a persistent sidebar navigation and a primary
     *   **Collapsed State**: Icons are perfectly centered (`justify-center px-0 py-3`) within the `64px` column to eliminate off-center alignment.
     *   **Expanded State**: Icons align left alongside text labels (`justify-start px-3.5 gap-3.5 py-3`) for a structured look.
 *   **Buttons (Top to Bottom)**:
-    1.  `Brand Header`: Shows logo pill `rh` and title `Rhema` strictly aligned to the 64px/h-16 header line.
+    1.  `Brand Header`: Shows the `/rhelologo.png` graphic inside the logo container pill and the brand title `rhelo` strictly aligned to the 64px/h-16 header line.
     2.  `Read`: Navigates to interlinear Scripture reading columns.
     3.  `Search`: Accesses Scripture full-text keyword indexing pane.
     4.  `Maps`: Opens GIS ancient geography location visualizer.
@@ -128,8 +128,11 @@ A visual historical dashboard charting events across scripture:
 
 ### E. Genealogical Lineage View (`GenealogyView.tsx`)
 Renders interactive biographical relationship nodes:
-*   **Left Sidebar Biography**: Features a prominent input box to search characters (e.g. *David*). Displays name meanings, gender (fixed mapping check resolving startsWith("m") to *Male* and startsWith("f") to *Female*), tribal lineages, attributes, and biography notes.
-*   **Right SVG Graph Canvas**: Renders family trees in a `viewBox="0 0 600 500"` layout.
+*   **Left Sidebar Biography**: Features a prominent input box to search characters (e.g. *David*). Displays name meanings, gender, tribal lineages, attributes, and biography notes.
+*   **Right SVG Graph Canvas**: Renders family relationship maps with a clean, minimalist dot-grid canvas pattern background.
+*   **Nodes Architecture**: Renders compact, highly rounded `110x30` pill shapes (`rounded-full` / `rx={15}`) with clean Outfit-based lowercase typography (`text-xs font-medium lowercase` configuration format).
+*   **Orthogonal Step Edges**: Connects generations using strict 90-degree horizontal and vertical step lines (equivalent to smoothstep/orthogonal edges) rather than loose diagonal curves.
+*   **Palette Highlights**: Employs a subtle slate-gray stroke (`#e2e8f0`) for default inactive connection lines, and the application's primary blue accent (`#3b82f6`) strictly for active highlighted paths connected to the selected individual. All inactive nodes are rendered in grayscale.
 *   **Spouses**: Staggered vertically on alternating offsets to prevent collision with children.
 *   **Children**: Arranged along a bottom row using a dynamic step-width calculation (`Math.min(110, 480 / (count - 1))`) that fits all children on-screen without canvas overflows.
 

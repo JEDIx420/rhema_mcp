@@ -24,6 +24,33 @@ import { fetchChapter, fetchVerseDetails, lookupLexicon, fetchOccurrences } from
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
+import { setGlassDragImage } from "@/lib/drag";
+
+const invokeTauri = async (cmd: string, args: any) => {
+  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke(cmd, args);
+  }
+  
+  if (typeof window !== "undefined") {
+    if (cmd === "speak_text") {
+      const { text, lang } = args || {};
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = (lang || "en").replace('_', '-');
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+    } else if (cmd === "stop_speech") {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        return;
+      }
+    }
+  }
+  throw new Error("Tauri IPC bridge not available in this environment");
+};
 
 const BIBLE_CHAPTER_COUNTS: Record<string, number> = {
   GEN: 50, EXO: 40, LEV: 27, NUM: 36, DEU: 34, JOS: 24, JDG: 21, RUT: 4,
@@ -83,14 +110,14 @@ interface VerseMenuInfo {
 function transliterateGreek(text: string): string {
   if (!text) return "";
   let word = text.trim();
-  
+
   let hasRoughBreathing = false;
   const roughBreathingChars = [
-    'ἁ','ἃ','ἅ','ἇ','ἑ','ἓ','ἕ','ἡ','ἣ','ἥ','ἧ','ἱ','ἳ','ἵ','ἷ','ὁ','ὃ','ὅ','ὑ','ὓ','ὕ','ὗ','ὡ','ὣ','ὥ','ὧ',
-    'Ἁ','Ἃ','Ἅ','Ἇ','Ἑ','Ἓ','Ἕ','Ἡ','Ἣ','Ἥ','Ἱ','Ἳ','Ὁ','ὃ','Ὅ','Ὑ','Ὓ','Ὕ','Ὗ','Ὡ','Ὓ','Ὥ','Ὗ',
-    'ῥ','Ῥ'
+    'ἁ', 'ἃ', 'ἅ', 'ἇ', 'ἑ', 'ἓ', 'ἕ', 'ἡ', 'ἣ', 'ἥ', 'ἧ', 'ἱ', 'ἳ', 'ἵ', 'ἷ', 'ὁ', 'ὃ', 'ὅ', 'ὑ', 'ὓ', 'ὕ', 'ὗ', 'ὡ', 'ὣ', 'ὥ', 'ὧ',
+    'Ἁ', 'Ἃ', 'Ἅ', 'Ἇ', 'Ἑ', 'Ἓ', 'Ἕ', 'Ἡ', 'Ἣ', 'Ἥ', 'Ἱ', 'Ἳ', 'Ὁ', 'ὃ', 'Ὅ', 'Ὑ', 'Ὓ', 'Ὕ', 'Ὗ', 'Ὡ', 'Ὓ', 'Ὥ', 'Ὗ',
+    'ῥ', 'Ῥ'
   ];
-  
+
   const normalized = word.normalize("NFD");
   if (normalized.includes("\u0314")) {
     hasRoughBreathing = true;
@@ -303,7 +330,7 @@ function isWordMatch(engWord: string, originalLemma: string, isOT: boolean): boo
         const vSub = stripVowels(sub);
         if (sub === mapped || sub.startsWith(mapped) || mapped.startsWith(sub)) return true;
         if (vSub === vMapped || vSub.startsWith(vMapped) || vMapped.startsWith(vSub)) return true;
-        
+
         for (const p2 of prefixes) {
           if (sub.startsWith(p2) && sub.length > p2.length + 1) {
             const sub2 = sub.slice(p2.length);
@@ -370,7 +397,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     TRANSLATIONS.map((t) => ({ ...t }))
   );
   const activeTranslations = enabledTranslations.filter((t) => t.enabled);
-  
+
   // Exegesis Drawer States
   const [selectedVerse, setSelectedVerse] = useState<VerseDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -386,6 +413,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const [chapterPlayLanguage, setChapterPlayLanguage] = useState<string>("text_en");
   const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number>(-1);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const singleSpeakTimerRef = useRef<any>(null);
 
   const handleStopChapter = () => {
     setIsPlayingChapter(false);
@@ -395,15 +423,44 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
+    invokeTauri("stop_speech", {}).catch(() => {});
   };
 
   const handlePlayChapter = () => {
     if (isPlayingChapter) {
       handleStopChapter();
     } else {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
       setSpeakingKey(null);
       setIsPlayingChapter(true);
       setCurrentPlayingIndex(0);
+    }
+  };
+
+  const handlePlayChapterFromVerse = (verseId: string, langKey: string) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+
+    const index = verses.findIndex((v) => v.id === verseId);
+    if (index !== -1) {
+      setChapterPlayLanguage(langKey);
+      setSpeakingKey(null);
+      if (currentPlayingIndex === index && isPlayingChapter) {
+        setIsPlayingChapter(false);
+        setCurrentPlayingIndex(-1);
+        setTimeout(() => {
+          setCurrentPlayingIndex(index);
+          setIsPlayingChapter(true);
+        }, 50);
+      } else {
+        setCurrentPlayingIndex(index);
+        setIsPlayingChapter(true);
+      }
     }
   };
 
@@ -418,49 +475,59 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   // Handle sequential play
   useEffect(() => {
+    let active = true;
+    let timerId: any = null;
+
     if (isPlayingChapter && currentPlayingIndex >= 0 && currentPlayingIndex < verses.length) {
       const playNext = async () => {
         try {
           const v = verses[currentPlayingIndex];
-          const text = chapterPlayLanguage === "text_en" 
-            ? v.text_en 
-            : chapterPlayLanguage === "text_original" 
-              ? v.text_original 
+          const text = chapterPlayLanguage === "text_en"
+            ? v.text_en
+            : chapterPlayLanguage === "text_original"
+              ? v.text_original
               : (v as any)[chapterPlayLanguage];
           const isGreek = BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT";
           const langCode = chapterPlayLanguage === "text_original"
             ? (isGreek ? "el" : "he")
             : chapterPlayLanguage.replace("text_", "");
 
+          if (!active) return;
+
           setSpeakingKey(`${v.id}-${chapterPlayLanguage}`);
 
-          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-          const res = await fetch(`${apiBase}/api/tts`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, language_code: langCode })
-          });
-          if (!res.ok) throw new Error("TTS failed");
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          currentAudioRef.current = audio;
-          audio.play();
-          audio.onended = () => {
-            setCurrentPlayingIndex((prev) => prev + 1);
-          };
-          audio.onerror = () => {
-            setCurrentPlayingIndex((prev) => prev + 1);
-          };
+          // Speak natively using Tauri command
+          await invokeTauri("speak_text", { text, lang: langCode });
+
+          if (!active) return;
+
+          // Estimate speech duration based on character count (approx 95ms per char + 600ms buffer)
+          const duration = Math.max(2000, text.length * 95 + 600);
+          timerId = setTimeout(() => {
+            if (active) {
+              setCurrentPlayingIndex((prev) => prev + 1);
+            }
+          }, duration);
+
         } catch (err) {
           console.error("Chapter play failed", err);
-          handleStopChapter();
+          if (active) {
+            handleStopChapter();
+          }
         }
       };
       playNext();
     } else if (isPlayingChapter && currentPlayingIndex >= verses.length) {
       handleStopChapter();
     }
+
+    return () => {
+      active = false;
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+      invokeTauri("stop_speech", {}).catch(() => {});
+    };
   }, [isPlayingChapter, currentPlayingIndex, verses, chapterPlayLanguage]);
 
   // Stop playback when chapter or book changes
@@ -468,41 +535,66 @@ export default function ReadingDesk(props: ReadingDeskProps) {
     handleStopChapter();
   }, [book, chapter]);
 
+  // Clean up singleSpeakTimerRef on unmount
+  useEffect(() => {
+    return () => {
+      if (singleSpeakTimerRef.current) {
+        clearTimeout(singleSpeakTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
     if (isPlayingChapter) {
       handleStopChapter();
     }
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    // Stop any active speech first
+    await invokeTauri("stop_speech", {}).catch(() => {});
+
     try {
       setSpeakingKey(key);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-      const res = await fetch(`${apiBase}/api/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language_code: langCode })
-      });
-      if (!res.ok) throw new Error("TTS failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.play();
-      audio.onended = () => setSpeakingKey(null);
-      audio.onerror = () => setSpeakingKey(null);
+      await invokeTauri("speak_text", { text, lang: langCode });
+      
+      const duration = Math.max(2000, text.length * 95 + 600);
+      if (singleSpeakTimerRef.current) {
+        clearTimeout(singleSpeakTimerRef.current);
+      }
+      singleSpeakTimerRef.current = setTimeout(() => {
+        setSpeakingKey(null);
+      }, duration);
     } catch (err) {
       console.error("Speak failed", err);
       setSpeakingKey(null);
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, verseId: string, verseText: string) => {
-    e.dataTransfer.setData("text/plain", verseText);
+  const handleDragStart = (e: React.DragEvent, verseId: string, verse: Verse) => {
+    const activeTextMap = activeTranslations.map((t) => {
+      const fieldKey = t.key as keyof Verse;
+      const val = (verse[fieldKey] as string) || "";
+      return { label: t.label, text: val };
+    });
+
+    e.dataTransfer.setData("application/json-verses", JSON.stringify({ verseId, translations: activeTextMap }));
+
+    const joinedText = activeTextMap.map((item) => `${item.label}: ${item.text}`).join("\n");
+    e.dataTransfer.setData("text/plain", joinedText);
     e.dataTransfer.setData("application/verse-id", verseId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId, verseText } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${verseId}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId, verseText: joinedText } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEndEvent = new CustomEvent("targum-drag-end");
+    const dragEndEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEndEvent);
   };
 
@@ -623,26 +715,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   // Audio synthesis helper
   const speakWord = async (word: string, isGreek: boolean) => {
     try {
-      const langCode = isGreek ? "el" : "he";
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-      const res = await fetch(`${apiBase}/api/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: word, language_code: langCode })
-      });
-      if (!res.ok) throw new Error("TTS failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.play();
+      const langCode = isGreek ? "el-GR" : "he-IL";
+      await invokeTauri("speak_text", { text: word, lang: langCode });
     } catch (err) {
-      console.error("speakWord failed, falling back to window.speechSynthesis", err);
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(word);
-        utterance.lang = isGreek ? "el-GR" : "he-IL";
-        window.speechSynthesis.speak(utterance);
-      }
+      console.error("speakWord failed", err);
     }
   };
 
@@ -935,14 +1011,13 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           <button
             onClick={() => !isFirstChapter && navigateChapter(-1)}
             disabled={isFirstChapter}
-            className={`p-1.5 rounded-md transition-colors ${
-              isFirstChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
-            }`}
+            className={`p-1.5 rounded-md transition-colors ${isFirstChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
+              }`}
             style={{ color: "var(--text-muted)" }}
           >
             <ChevronLeft size={18} />
           </button>
- 
+
           {/* Book Selector */}
           <div>
             <button
@@ -960,13 +1035,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
             </button>
           </div>
- 
+
           <button
             onClick={() => !isLastChapter && navigateChapter(1)}
             disabled={isLastChapter}
-            className={`p-1.5 rounded-md transition-colors ${
-              isLastChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
-            }`}
+            className={`p-1.5 rounded-md transition-colors ${isLastChapter ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
+              }`}
             style={{ color: "var(--text-muted)" }}
           >
             <ChevronRight size={18} />
@@ -985,32 +1059,32 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ title: "New Reading Session", content: "" })
                 }).then(r => r.json());
-                
+
                 if (res.session_id) {
-                  window.dispatchEvent(new CustomEvent("targum-session-updated"));
+                  window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
                   if (props.onViewChange) props.onViewChange("sessions");
                 }
               } catch (err) {
                 console.error(err);
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-all font-sans shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-all font-sans shadow-sm"
             title="Create new study session"
             style={{ fontFamily: "var(--font-outfit), sans-serif" }}
           >
             <Plus size={15} className="text-blue-600" />
-            <span>+ Session</span>
+            <span>Session</span>
           </button>
 
           {/* Languages Dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowLangDropdown(!showLangDropdown)}
-              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-base font-medium text-slate-800 cursor-pointer transition-colors shadow-sm font-sans"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-colors shadow-sm font-sans"
               style={{ fontFamily: "var(--font-outfit), sans-serif" }}
             >
               <span>Languages</span>
-              <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${showLangDropdown ? "rotate-180" : ""}`} />
+              <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${showLangDropdown ? "rotate-180" : ""}`} />
             </button>
             <AnimatePresence>
               {showLangDropdown && (
@@ -1021,18 +1095,18 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.96 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute left-0 mt-3 min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-xl p-2 z-50 flex flex-col gap-1"
+                    className="absolute left-0 mt-2 min-w-[200px] rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-md shadow-2xl p-2 z-50 flex flex-col gap-0.5"
                   >
                     {enabledTranslations.map((t) => (
                       <button
                         key={t.key}
                         onClick={() => toggleTranslation(t.key)}
-                        className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors text-left font-sans"
+                        className="flex items-center justify-between w-full px-3 py-2 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors text-left font-sans"
                       >
                         <span
-                          className={`text-base transition-colors ${
-                            t.enabled ? "text-[var(--primary)] font-semibold" : "text-slate-700"
-                          }`}
+                          className={`text-sm transition-colors ${t.enabled ? "text-[var(--primary)] font-semibold" : "text-slate-700"
+                            }`}
+                          style={{ fontFamily: "var(--font-outfit), sans-serif" }}
                         >
                           {t.label}
                         </span>
@@ -1047,14 +1121,14 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             </AnimatePresence>
           </div>
         </div>
- 
+
         {/* Text Sizer */}
         <div className="flex items-center gap-4 mr-4">
           {/* Font Sizer */}
-          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
             <button
               onClick={() => setTextSize(Math.max(12, textSize - 1))}
-              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-r border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
+              className="px-2.5 py-1.5 hover:bg-slate-100 transition-colors border-r border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
               title="Decrease Font Size"
             >
               A-
@@ -1064,7 +1138,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
             </span>
             <button
               onClick={() => setTextSize(Math.min(26, textSize + 1))}
-              className="px-2.5 py-1 hover:bg-slate-100 transition-colors border-l border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
+              className="px-2.5 py-1.5 hover:bg-slate-100 transition-colors border-l border-slate-200 cursor-pointer text-xs font-semibold text-slate-500 font-sans"
               title="Increase Font Size"
             >
               A+
@@ -1111,11 +1185,10 @@ export default function ReadingDesk(props: ReadingDeskProps) {
               <div className="flex items-center gap-3.5 mb-6 p-2 bg-slate-50 border border-slate-200/60 rounded-xl max-w-max select-none">
                 <button
                   onClick={handlePlayChapter}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-xs cursor-pointer ${
-                    isPlayingChapter 
-                      ? "bg-red-500 hover:bg-red-600 text-white" 
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-xs cursor-pointer ${isPlayingChapter
+                      ? "bg-red-500 hover:bg-red-600 text-white"
                       : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }`}
+                    }`}
                 >
                   {isPlayingChapter ? (
                     <>
@@ -1131,7 +1204,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                   <span className="text-xs text-slate-555 font-semibold font-sans">Language:</span>
                   <select
                     value={chapterPlayLanguage}
-                    onChange={(e) => setChapterPlayLanguage(e.target.value)}
+                    onChange={(e) => {
+                      if (isPlayingChapter) {
+                        handleStopChapter();
+                      }
+                      setChapterPlayLanguage(e.target.value);
+                    }}
                     className="text-xs border border-slate-200 bg-white rounded-md px-2.5 py-1.5 outline-none text-slate-800 font-sans cursor-pointer hover:border-slate-350 transition-colors"
                   >
                     {activeTranslations.map((t) => (
@@ -1150,7 +1228,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     key={v.id}
                     layout
                     draggable
-                    onDragStart={(e) => handleDragStart(e as any, v.id, v.text_en)}
+                    onDragStart={(e) => handleDragStart(e as any, v.id, v)}
                     onDragEnd={handleDragEnd}
                     className="group rounded-lg p-3 transition-all duration-150 cursor-grab active:cursor-grabbing"
                     style={{
@@ -1170,13 +1248,28 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                       {activeTranslations.map((t, idx) => (
                         <div key={t.key} className={`flex items-start justify-between group/col ${idx > 0 ? "pl-5" : ""} ${speakingKey === `${v.id}-${t.key}` ? "ring-2 ring-blue-500/20 rounded-lg bg-blue-50/10 p-1 -m-1" : ""}`}>
                           <div className="flex items-start">
-                            <button
-                              onClick={(e) => handleVerseNumberClick(e, v)}
-                              className="text-xs font-bold mr-2.5 mt-0.5 select-none hover:text-blue-600 cursor-context-menu shrink-0"
-                              style={{ color: "var(--primary)" }}
-                            >
-                              {v.verse}
-                            </button>
+                            <div className="flex items-center mr-2 mt-0.5 shrink-0 gap-1 select-none">
+                              {/* Small Play Button, visible on hover */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePlayChapterFromVerse(v.id, t.key);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 p-0.5 rounded hover:bg-blue-50 cursor-pointer transition-opacity opacity-0 group-hover/col:opacity-100"
+                                title="Play chapter from this verse"
+                                style={{ width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                              >
+                                <Play size={10} fill="currentColor" />
+                              </button>
+
+                              <button
+                                onClick={(e) => handleVerseNumberClick(e, v)}
+                                className="text-xs font-bold hover:text-blue-600 cursor-context-menu"
+                                style={{ color: "var(--primary)" }}
+                              >
+                                {v.verse}
+                              </button>
+                            </div>
                             {t.key === "text_original" ? (
                               renderOriginalText(v)
                             ) : t.key === "text_en" ? (
@@ -1192,22 +1285,26 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                           </div>
                           {((v as any)[t.key] || t.key === "text_en" || t.key === "text_original") && (
                             <button
+                              disabled={speakingKey !== null}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const isGreek = BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT";
-                                const text = t.key === "text_en" 
-                                  ? v.text_en 
-                                  : t.key === "text_original" 
-                                    ? v.text_original 
+                                const text = t.key === "text_en"
+                                  ? v.text_en
+                                  : t.key === "text_original"
+                                    ? v.text_original
                                     : (v as any)[t.key];
                                 const langCode = t.key === "text_original"
                                   ? (isGreek ? "el" : "he")
                                   : t.key.replace("text_", "");
                                 handleSpeakText(text, langCode, `${v.id}-${t.key}`);
                               }}
-                              className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 opacity-50 group-hover/col:opacity-100 ${
-                                speakingKey === `${v.id}-${t.key}` ? "text-blue-600 bg-blue-50 opacity-100!" : "text-slate-400 hover:text-slate-700"
-                              }`}
+                              className={`ml-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors shrink-0 ${speakingKey === `${v.id}-${t.key}`
+                                  ? "text-blue-600 bg-blue-50 opacity-100! cursor-not-allowed"
+                                  : speakingKey !== null
+                                    ? "text-slate-200 opacity-20 cursor-not-allowed"
+                                    : "text-slate-400 hover:text-slate-700 cursor-pointer opacity-50 group-hover/col:opacity-100"
+                                }`}
                               title="Listen to translation"
                             >
                               <Volume2 size={13} className={speakingKey === `${v.id}-${t.key}` ? "animate-pulse" : ""} />
@@ -1429,7 +1526,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       <AnimatePresence>
         {selectedLexiconModalWord && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div 
+            <div
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
               onClick={() => setSelectedLexiconModalWord(null)}
             />
@@ -1460,7 +1557,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                     )}
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedLexiconModalWord(null)}
                   className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 text-slate-450 hover:text-slate-700 transition-colors cursor-pointer"
                 >
@@ -1484,7 +1581,21 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-sans">Lexicon Definition</h4>
-                  <p className="text-[15px] leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-serif">
+                  <p
+                    draggable
+                    onDragStart={(e) => {
+                      const text = selectedLexiconModalWord.definition;
+                      const refId = `[LEXICON] ${selectedLexiconModalWord.strongs_id} (${selectedLexiconModalWord.lemma})`;
+                      e.dataTransfer.setData("text/plain", text);
+                      e.dataTransfer.setData("application/verse-id", refId);
+                      e.dataTransfer.effectAllowed = "copy";
+                      setGlassDragImage(e, `${selectedLexiconModalWord.strongs_id}`);
+                      const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
+                      window.dispatchEvent(dragEvent);
+                    }}
+                    onDragEnd={handleDragEnd}
+                    className="text-[15px] leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-serif cursor-grab hover:bg-slate-100/50 transition-colors"
+                  >
                     {selectedLexiconModalWord.definition}
                   </p>
                 </div>

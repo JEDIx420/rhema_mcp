@@ -3,8 +3,8 @@ import sqlite3
 import json
 import os
 
-mcp = FastMCP("Targum Study Engine")
-DB_PATH = os.path.join(os.path.dirname(__file__), "rhema.db")
+mcp = FastMCP("Rhelo Study Engine")
+DB_PATH = os.environ.get("RHELO_DB_PATH", os.environ.get("TARGUM_DB_PATH", os.path.join(os.path.dirname(__file__), "rhelo.db")))
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -95,20 +95,46 @@ def compile_html_to_pdf(html_content: str, title: str, output_path: str):
             continue
         
         # Clean text
-        text = re.sub(r'<[^>]+>', '', item).strip()
-        if not text:
+        text_rich = item
+        text_rich = re.sub(r'<strong>', '<b>', text_rich)
+        text_rich = re.sub(r'</strong>', '</b>', text_rich)
+        text_rich = re.sub(r'<em>', '<i>', text_rich)
+        text_rich = re.sub(r'</em>', '</i>', text_rich)
+        text_rich = re.sub(r'<u>', '<u>', text_rich)
+        text_rich = re.sub(r'</u>', '</u>', text_rich)
+        text_rich = re.sub(r'<span[^>]*style="[^"]*font-size:\s*([0-9]+)px;?[^"]*"[^>]*>', r'<font size="\1">', text_rich)
+        text_rich = re.sub(r'</span>', r'</font>', text_rich)
+        # Strip all other HTML tags
+        text_rich = re.sub(r'<(?!/?(?:b|i|u|font)\b)[^>]+>', '', text_rich).strip()
+        
+        if not text_rich:
             continue
             
-        if current_tag == '<h2>':
-            story.append(Paragraph(text, h2_style))
-        elif current_tag == '<h3>':
-            story.append(Paragraph(text, h3_style))
-        elif current_tag == '<blockquote>':
-            story.append(Paragraph(text, quote_style))
-        elif current_tag == '<li>':
-            story.append(Paragraph(f"&bull; {text}", body_style))
-        else:
-            story.append(Paragraph(text, body_style))
+        p_text = text_rich
+        try:
+            if current_tag == '<h2>':
+                story.append(Paragraph(p_text, h2_style))
+            elif current_tag == '<h3>':
+                story.append(Paragraph(p_text, h3_style))
+            elif current_tag == '<blockquote>':
+                story.append(Paragraph(p_text, quote_style))
+            elif current_tag == '<li>':
+                story.append(Paragraph(f"&bull; {p_text}", body_style))
+            else:
+                story.append(Paragraph(p_text, body_style))
+        except Exception:
+            # Fallback to plain text if XML parsing fails due to mismatched tags
+            plain_text = re.sub(r'<[^>]+>', '', p_text).strip()
+            if current_tag == '<h2>':
+                story.append(Paragraph(plain_text, h2_style))
+            elif current_tag == '<h3>':
+                story.append(Paragraph(plain_text, h3_style))
+            elif current_tag == '<blockquote>':
+                story.append(Paragraph(plain_text, quote_style))
+            elif current_tag == '<li>':
+                story.append(Paragraph(f"&bull; {plain_text}", body_style))
+            else:
+                story.append(Paragraph(plain_text, body_style))
 
     doc.build(story)
 
@@ -694,100 +720,6 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                     response_data = {"error": "Missing session_id"}
                     status_code = 400
 
-            elif path == "/api/tts":
-                if post_data:
-                    data = json.loads(post_data.decode('utf-8'))
-                text = data.get("text", "")
-                language_code = data.get("language_code", "en")
-                if language_code == "he":
-                    language_code = "iw"
-                
-                if text:
-                    if language_code == "en":
-                        import tempfile
-                        import subprocess
-                        import os
-                        
-                        temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
-                        os.close(temp_fd)
-                        try:
-                            subprocess.run([
-                                "say",
-                                "-o", temp_path,
-                                "--file-format=WAVE",
-                                "--data-format=LEI16@22050",
-                                text
-                            ], check=True)
-                            
-                            with open(temp_path, "rb") as f:
-                                binary_data = f.read()
-                            is_binary = True
-                            response_content_type = "audio/wav"
-                            status_code = 200
-                        finally:
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                    else:
-                        from gtts import gTTS
-                        import io
-                        
-                        tts = gTTS(text=text, lang=language_code)
-                        fp = io.BytesIO()
-                        tts.write_to_fp(fp)
-                        fp.seek(0)
-                        binary_data = fp.read()
-                        is_binary = True
-                        response_content_type = "audio/mpeg"
-                        status_code = 200
-                else:
-                    response_data = {"error": "Missing text"}
-                    status_code = 400
-
-            elif path == "/api/stt":
-                if post_data:
-                    data = json.loads(post_data.decode('utf-8'))
-                audio_b64 = data.get("audio")
-                language_code = data.get("language_code", "en-US")
-                
-                if len(language_code) == 2:
-                    lang_map = {"en": "en-US", "hi": "hi-IN", "ta": "ta-IN", "te": "te-IN", "ml": "ml-IN"}
-                    language_code = lang_map.get(language_code, "en-US")
-                
-                if audio_b64:
-                    import base64
-                    import tempfile
-                    import os
-                    import speech_recognition as sr
-                    
-                    try:
-                        audio_bytes = base64.b64decode(audio_b64)
-                        wav_bytes = convert_to_wav(audio_bytes)
-                        
-                        temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
-                        os.close(temp_fd)
-                        try:
-                            with open(temp_path, "wb") as f:
-                                f.write(wav_bytes)
-                                
-                            r = sr.Recognizer()
-                            with sr.AudioFile(temp_path) as source:
-                                audio_data = r.record(source)
-                                try:
-                                    text = r.recognize_google(audio_data, language=language_code)
-                                    response_data = {"text": text}
-                                    status_code = 200
-                                except Exception as e:
-                                    response_data = {"text": "", "error": f"Speech recognition failed: {e}"}
-                                    status_code = 200
-                        finally:
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                    except Exception as e:
-                        response_data = {"text": "", "error": f"Audio processing failed: {e}"}
-                        status_code = 500
-                else:
-                    response_data = {"error": "Missing audio data"}
-                    status_code = 400
 
             elif path == "/api/sessions/pdf":
                 if post_data:
@@ -797,7 +729,8 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                 html_content = data.get("content", "")
                 
                 import os
-                pdf_dir = "/Users/vincyvincent/rhema_mcp/frontend/public/documents"
+                db_dir = os.path.dirname(DB_PATH)
+                pdf_dir = os.path.join(db_dir, "documents")
                 os.makedirs(pdf_dir, exist_ok=True)
                 
                 pdf_filename = f"{session_id}.pdf"
@@ -842,12 +775,13 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
         if path.startswith("/documents/"):
             filename = os.path.basename(path)
             if filename.endswith(".pdf"):
-                pdf_dir = "/Users/vincyvincent/rhema_mcp/frontend/public/documents"
+                db_dir = os.path.dirname(DB_PATH)
+                pdf_dir = os.path.join(db_dir, "documents")
                 pdf_path = os.path.join(pdf_dir, filename)
                 if os.path.exists(pdf_path):
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/pdf')
-                    self.send_header('Content-Disposition', f'inline; filename="{filename}"')
+                    self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
                     self.send_cors_headers()
                     self.end_headers()
                     with open(pdf_path, 'rb') as f:
@@ -1117,13 +1051,48 @@ class JSONAPIHandler(BaseHTTPRequestHandler):
                         """, (person['id'],))
                         relations = [dict(r) for r in cursor.fetchall()]
                         
+                        # Get children and spouse counts for center person and all relations
+                        all_ids = [person['id']] + [r['relation_id'] for r in relations]
+                        child_counts = {}
+                        spouse_counts = {}
+                        if all_ids:
+                            placeholders = ",".join(["?"] * len(all_ids))
+                            
+                            # Children counts (where person is father/mother/Creator)
+                            cursor.execute(f"""
+                                SELECT person_id_1, COUNT(*) as children_count
+                                FROM relationships
+                                WHERE person_id_1 IN ({placeholders}) AND relationship_type IN ('father', 'mother', 'Creator')
+                                GROUP BY person_id_1
+                            """, all_ids)
+                            child_counts = {row[0]: row[1] for row in cursor.fetchall()}
+                            
+                            # Spouse counts (where person is husband/wife/concubine)
+                            cursor.execute(f"""
+                                SELECT person_id_1, COUNT(*) as spouse_count
+                                FROM relationships
+                                WHERE person_id_1 IN ({placeholders}) AND relationship_type IN ('wife', 'husband', 'concubine')
+                                GROUP BY person_id_1
+                            """, all_ids)
+                            spouse_counts = {row[0]: row[1] for row in cursor.fetchall()}
+                        
+                        # Inject counts into profile
+                        person_dict = dict(person)
+                        person_dict['children_count'] = child_counts.get(person['id'], 0)
+                        person_dict['spouse_count'] = spouse_counts.get(person['id'], 0)
+                        
+                        # Inject counts into relationships
+                        for r in relations:
+                            r['children_count'] = child_counts.get(r['relation_id'], 0)
+                            r['spouse_count'] = spouse_counts.get(r['relation_id'], 0)
+                        
                         # Get name meaning
                         cursor.execute("SELECT meaning FROM bible_names_dictionary WHERE name = ?", (person['name'],))
                         meaning_row = cursor.fetchone()
                         meaning = meaning_row[0] if meaning_row else None
                         
                         response_data = {
-                            "profile": dict(person),
+                            "profile": person_dict,
                             "relationships": relations,
                             "name_meaning": meaning
                         }

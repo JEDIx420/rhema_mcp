@@ -1,6 +1,6 @@
-# Rhema Database Schema Specification
+# Rhelo Database Schema Specification
 
-This document defines the schema, table details, virtual search indices, and relationships of `rhema.db`.
+This document defines the schema, table details, virtual search indices, and relationships of `rhelo.db`.
 
 ---
 

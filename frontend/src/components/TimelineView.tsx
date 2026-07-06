@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Clock, Navigation, Calendar, Loader2, BookOpen } from "lucide-react";
 import { fetchTimeline } from "@/lib/api";
 import { getBookName } from "@/lib/books";
+import { setGlassDragImage } from "@/lib/drag";
 
 interface TimelineEvent {
   event_id: string;
@@ -85,12 +86,16 @@ export default function TimelineView({ onNavigate, onViewChange }: TimelineViewP
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: refId, verseText: text } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${title}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("targum-drag-end");
+    const dragEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEvent);
   };
 

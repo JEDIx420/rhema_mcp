@@ -15,6 +15,35 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Save } from "lucide-react";
 import { fetchSessions, updateSession } from "@/lib/api";
 
+const invokeTauri = async (cmd: string, args: any) => {
+  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke(cmd, args);
+  }
+  throw new Error("Tauri IPC bridge not available in this environment");
+};
+
+const resampleTo16k = (audioBuffer: AudioBuffer): number[] => {
+  const inputSampleRate = audioBuffer.sampleRate;
+  const targetSampleRate = 16000;
+  const inputBuffer = audioBuffer.getChannelData(0); // mono
+  
+  if (inputSampleRate === targetSampleRate) {
+    return Array.from(inputBuffer);
+  }
+  
+  const ratio = inputSampleRate / targetSampleRate;
+  const newLength = Math.round(inputBuffer.length / ratio);
+  const result = new Float32Array(newLength);
+  
+  for (let i = 0; i < newLength; i++) {
+    const nextIndex = Math.min(inputBuffer.length - 1, Math.round(i * ratio));
+    result[i] = inputBuffer[nextIndex];
+  }
+  
+  return Array.from(result);
+};
+
 const addDateHeaderIfNeeded = (currentContent: string) => {
   const today = new Date();
   const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -71,12 +100,12 @@ export default function Home() {
       setDraggedVerse(null);
     };
 
-    window.addEventListener("targum-drag-start", handleDragStartEvent);
-    window.addEventListener("targum-drag-end", handleDragEndEvent);
+    window.addEventListener("rhelo-drag-start", handleDragStartEvent);
+    window.addEventListener("rhelo-drag-end", handleDragEndEvent);
 
     return () => {
-      window.removeEventListener("targum-drag-start", handleDragStartEvent);
-      window.removeEventListener("targum-drag-end", handleDragEndEvent);
+      window.removeEventListener("rhelo-drag-start", handleDragStartEvent);
+      window.removeEventListener("rhelo-drag-end", handleDragEndEvent);
     };
   }, []);
 
@@ -89,8 +118,8 @@ export default function Home() {
         setActiveSessionTitle(customEvent.detail.title);
       }
     };
-    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged);
-    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged);
+    window.addEventListener("rhelo-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("rhelo-active-session-changed", handleActiveSessionChanged);
   }, []);
 
   // Fetch initial active session list and selection
@@ -113,68 +142,123 @@ export default function Home() {
     const handleSessionUpdated = () => {
       initActiveSession();
     };
-    window.addEventListener("targum-session-updated", handleSessionUpdated);
-    return () => window.removeEventListener("targum-session-updated", handleSessionUpdated);
+    window.addEventListener("rhelo-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("rhelo-session-updated", handleSessionUpdated);
   }, [activeSessionId]);
 
   const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+    const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
+    
+    if (isTauri) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
 
-      mediaRecorder.onstop = async () => {
-        setIsProcessingSTT(true);
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64Data = (reader.result as string).split(",")[1];
+        mediaRecorder.onstop = async () => {
+          setIsProcessingSTT(true);
           try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-            const res = await fetch(`${apiBase}/api/stt`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ audio: base64Data, language_code: "en" })
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.text) {
-                setTranscribedText(data.text);
-                setReviewTargetSessionId(activeSessionId);
-              } else {
-                alert("Speech recognition was unable to capture any words. Please try again.");
-              }
+            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            
+            // Decode audio binary to float PCM samples via AudioContext
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // Downsample float samples to 16000Hz mono
+            const samples = resampleTo16k(audioBuffer);
+            
+            // Call offline native Tauri command
+            const text = await invokeTauri("transcribe_audio", { audioSamples: samples }) as string;
+            
+            if (text && text.trim()) {
+              setTranscribedText(text);
+              setReviewTargetSessionId(activeSessionId);
             } else {
-              alert("Speech recognition server error. Please try again.");
+              alert("Speech recognition was unable to capture any words. Please try again.");
             }
           } catch (err) {
             console.error("STT transcribing error", err);
+            alert("Transcription failed: " + (err instanceof Error ? err.message : String(err)));
           } finally {
             setIsProcessingSTT(false);
           }
+          stream.getTracks().forEach((track) => track.stop());
         };
-        stream.getTracks().forEach((track) => track.stop());
-      };
 
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone access denied", err);
-      alert("Microphone access denied or not supported: " + (err instanceof Error ? err.message : String(err)));
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch (err) {
+        console.error("Microphone access denied", err);
+        alert("Microphone access denied or not supported: " + (err instanceof Error ? err.message : String(err)));
+      }
+    } else {
+      // Fallback: Web browser native SpeechRecognition (Chrome, Safari, etc.)
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Speech recognition is not supported in this browser. Please use Chrome or run inside the Tauri desktop application.");
+        return;
+      }
+      
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = "en-US";
+        
+        recognition.onstart = () => {
+          setIsRecording(true);
+        };
+        
+        recognition.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+          alert("Speech recognition error: " + event.error);
+        };
+        
+        recognition.onend = () => {
+          setIsRecording(false);
+        };
+        
+        recognition.onresult = (event: any) => {
+          const text = event.results[0][0].transcript;
+          if (text && text.trim()) {
+            setTranscribedText(text);
+            setReviewTargetSessionId(activeSessionId);
+          } else {
+            alert("Speech recognition was unable to capture any words. Please try again.");
+          }
+        };
+        
+        (window as any)._activeRecognition = recognition;
+        recognition.start();
+      } catch (err) {
+        console.error("Failed to start SpeechRecognition", err);
+        setIsRecording(false);
+      }
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+    const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
+    
+    if (isTauri) {
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+      }
+    } else {
+      const recognition = (window as any)._activeRecognition;
+      if (recognition) {
+        recognition.stop();
+      }
       setIsRecording(false);
     }
   };
@@ -191,8 +275,8 @@ export default function Home() {
       const updatedContent = contentWithDate + `<p><strong>[${timestamp}]</strong>: ${transcribedText.trim()}</p>`;
       await updateSession(reviewTargetSessionId, targetSession.title, updatedContent);
       
-      window.dispatchEvent(new CustomEvent("targum-session-updated"));
-      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
+      window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
         detail: { sessionId: reviewTargetSessionId, title: targetSession.title }
       }));
       
@@ -362,7 +446,7 @@ export default function Home() {
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(targetSession.session_id, targetSession.title, updatedContent);
                       
-                      window.dispatchEvent(new CustomEvent("targum-session-updated"));
+                      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
                       setActiveView("sessions");
                     }
                   } else {
@@ -375,7 +459,7 @@ export default function Home() {
                         `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`;
                       await updateSession(latest.session_id, latest.title, updatedContent);
                       
-                      window.dispatchEvent(new CustomEvent("targum-session-updated"));
+                      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
                       setActiveView("sessions");
                     }
                   }

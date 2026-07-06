@@ -1,9 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Search, Loader2, BookMarked, BookOpen, Volume2 } from "lucide-react";
 import { searchLexicon, searchTopics } from "@/lib/api";
+import { setGlassDragImage } from "@/lib/drag";
+
+const invokeTauri = async (cmd: string, args: any) => {
+  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke(cmd, args);
+  }
+  
+  if (typeof window !== "undefined") {
+    if (cmd === "speak_text") {
+      const { text, lang } = args || {};
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = (lang || "en").replace('_', '-');
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+    } else if (cmd === "stop_speech") {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        return;
+      }
+    }
+  }
+  throw new Error("Tauri IPC bridge not available in this environment");
+};
 
 export default function DictionaryView() {
   const [query, setQuery] = useState("");
@@ -13,23 +40,29 @@ export default function DictionaryView() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+  const speakTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (speakTimerRef.current) {
+        clearTimeout(speakTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSpeakText = async (text: string, langCode: string, key: string) => {
     try {
       setSpeakingKey(key);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-      const res = await fetch(`${apiBase}/api/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language_code: langCode })
-      });
-      if (!res.ok) throw new Error("TTS failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.play();
-      audio.onended = () => setSpeakingKey(null);
-      audio.onerror = () => setSpeakingKey(null);
+      await invokeTauri("stop_speech", {}).catch(() => {});
+      await invokeTauri("speak_text", { text, lang: langCode });
+      
+      const duration = Math.max(2000, text.length * 95 + 600);
+      if (speakTimerRef.current) {
+        clearTimeout(speakTimerRef.current);
+      }
+      speakTimerRef.current = setTimeout(() => {
+        setSpeakingKey(null);
+      }, duration);
     } catch (err) {
       console.error("Speak failed", err);
       setSpeakingKey(null);
@@ -42,12 +75,16 @@ export default function DictionaryView() {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: refId, verseText: text } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${name}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("targum-drag-end");
+    const dragEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEvent);
   };
 

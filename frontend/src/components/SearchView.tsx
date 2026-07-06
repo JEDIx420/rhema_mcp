@@ -6,6 +6,7 @@ import { Search as SearchIcon, Loader2, Navigation, ChevronLeft, ChevronRight, B
 import { searchScriptures } from "@/lib/api";
 import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import StudyPane from "./StudyPane";
+import { setGlassDragImage } from "@/lib/drag";
 
 interface SearchResult {
   id: string;
@@ -38,12 +39,16 @@ export default function SearchView({ onNavigate, onViewChange }: SearchViewProps
     e.dataTransfer.setData("text/plain", verseText);
     e.dataTransfer.setData("application/verse-id", verseId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId, verseText } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${verseId}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId, verseText } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEvent = new CustomEvent("targum-drag-end");
+    const dragEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEvent);
   };
 

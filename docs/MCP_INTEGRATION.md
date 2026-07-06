@@ -1,4 +1,4 @@
-# Rhema Model Context Protocol (MCP) Integration
+# Rhelo Model Context Protocol (MCP) Integration
 
 This document describes how to configure and integrate the Python-based FastMCP server with desktop clients (Tauri) or terminal/editor agents.
 

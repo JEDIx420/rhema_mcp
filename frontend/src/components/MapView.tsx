@@ -5,6 +5,7 @@ import { Loader2, MapPin, Compass, Navigation, ChevronDown, Flag } from "lucide-
 import { fetchChapterMap, fetchGeographyRoutes, fetchRoutePoints } from "@/lib/api";
 import { getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
+import { setGlassDragImage } from "@/lib/drag";
 
 interface MapPlace {
   name: string;
@@ -172,8 +173,20 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
       }
     });
 
+    let observer: ResizeObserver | null = null;
+    if (mapRef.current) {
+      observer = new ResizeObserver(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      });
+      observer.observe(mapRef.current);
+    }
+
     return () => {
-      // Map instance is preserved, we'll just clear markers when places change
+      if (observer) {
+        observer.disconnect();
+      }
     };
   }, []);
 
@@ -194,6 +207,69 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
         polylineRef.current = null;
       }
 
+      // Listen for popupopen to make elements inside popups draggable
+      leafletInstance.off("popupopen");
+      leafletInstance.on("popupopen", (e: any) => {
+        const popupEl = e.popup.getElement();
+        if (popupEl) {
+          const draggableElements = popupEl.querySelectorAll(".popup-draggable-quote");
+          draggableElements.forEach((el: any) => {
+            el.setAttribute("draggable", "true");
+            el.style.cursor = "grab";
+            
+            if (el.dataset.dragBound) return;
+            el.dataset.dragBound = "true";
+
+            el.addEventListener("dragstart", (dragEvt: any) => {
+              const text = el.innerText || el.textContent || "";
+              const refId = el.getAttribute("data-ref-id") || "[MAP POPUP]";
+              if (dragEvt.dataTransfer) {
+                dragEvt.dataTransfer.setData("text/plain", text);
+                dragEvt.dataTransfer.setData("application/verse-id", refId);
+                dragEvt.dataTransfer.effectAllowed = "copy";
+                setGlassDragImage(dragEvt, `Map Detail`);
+              }
+              const startEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
+              window.dispatchEvent(startEvent);
+            });
+            el.addEventListener("dragend", () => {
+              const endEvent = new CustomEvent("rhelo-drag-end");
+              window.dispatchEvent(endEvent);
+            });
+          });
+        }
+      });
+
+      // Helper to make leaflet marker elements HTML5-draggable
+      const setupDragForMarker = (markerInstance: any, placeName: string, lat: number, lng: number, verseId?: string) => {
+        const setup = () => {
+          const el = markerInstance.getElement();
+          if (el) {
+            el.setAttribute("draggable", "true");
+            el.style.cursor = "grab";
+            el.addEventListener("dragstart", (e: any) => {
+              const text = `${placeName} (Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)})${verseId ? ` - Referenced in ${verseId}` : ""}`;
+              const refId = `[PLACE] ${placeName}`;
+              if (e.dataTransfer) {
+                e.dataTransfer.setData("text/plain", text);
+                e.dataTransfer.setData("application/verse-id", refId);
+                e.dataTransfer.effectAllowed = "copy";
+                setGlassDragImage(e, `${placeName}`);
+              }
+              const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
+              window.dispatchEvent(dragEvent);
+            });
+            el.addEventListener("dragend", () => {
+              const dragEndEvent = new CustomEvent("rhelo-drag-end");
+              window.dispatchEvent(dragEndEvent);
+            });
+          }
+        };
+        setup();
+        // Also attach to add event in case DOM element isn't created yet
+        markerInstance.on("add", setup);
+      };
+
       if (activeTab === "chapter") {
         if (places.length === 0) return;
         const group: [number, number][] = [];
@@ -209,34 +285,29 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
               ${place.meaning ? `<div style="font-style: italic; color: #7c3aed; font-size: 11px; margin-bottom: 6px; font-family: Georgia, serif;">"Meaning: ${place.meaning}"</div>` : ""}
               <div style="margin-bottom: 8px;">
                 <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Scripture Reference (${place.verse_id})</span>
-                <div style="font-family: Georgia, serif; font-size: 13px; color: #334155; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; font-style: italic;">
+                <div class="popup-draggable-quote" data-ref-id="[PLACE] ${place.name} (${place.verse_id})" style="font-family: Georgia, serif; font-size: 13px; color: #334155; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; font-style: italic; cursor: grab;">
                   &ldquo;${place.text_en || "Verse text not loaded"}&rdquo;
                 </div>
-                ${place.text_original ? `<div style="font-family: Georgia, serif; font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">${place.text_original}</div>` : ""}
+                ${place.text_original ? `<div class="popup-draggable-quote" data-ref-id="[PLACE] ${place.name} (${place.verse_id} - Original)" style="font-family: Georgia, serif; font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600; cursor: grab;">${place.text_original}</div>` : ""}
               </div>
               ${place.dict_definition ? `
                 <div style="margin-bottom: 8px;">
                   <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Easton/Smith Bible Dictionary</span>
-                  <div style="font-size: 11px; color: #475569; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;" title="${place.dict_definition.replace(/"/g, '&quot;')}">
+                  <div class="popup-draggable-quote" data-ref-id="[DICT] ${place.name}" style="font-size: 11px; color: #475569; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; cursor: grab;" title="${place.dict_definition.replace(/"/g, '&quot;')}">
                     ${place.dict_definition}
                   </div>
                 </div>
               ` : ""}
-              ${place.commentary ? `
-                <div>
-                  <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Commentary Snippet</span>
-                  <div style="font-size: 11px; color: #475569; background-color: rgba(37,99,235,0.02); padding: 8px; border-radius: 8px; border: 1px solid rgba(37,99,235,0.05); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
-                    ${place.commentary}
-                  </div>
-                </div>
-              ` : ""}
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Coords: ${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}</div>
             </div>
           `;
 
           const marker = L.marker([place.latitude, place.longitude])
-            .addTo(leafletInstance)
-            .bindPopup(popupContent);
+            .bindPopup(popupContent)
+            .addTo(leafletInstance);
           
+          setupDragForMarker(marker, place.name, place.latitude, place.longitude, place.verse_id);
+
           markersRef.current.push(marker);
           group.push([place.latitude, place.longitude]);
 
@@ -248,7 +319,8 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
         if (group.length > 0) {
           leafletInstance.fitBounds(L.latLngBounds(group), { padding: [50, 50] });
         }
-      } else if (activeTab === "routes") {
+      } else {
+        // Routes view
         if (routePoints.length === 0) return;
         const group: [number, number][] = [];
 
@@ -257,24 +329,35 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
           const popupContent = `
             <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.5; color: #1e293b; max-width: 280px; padding: 4px;">
               <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px; gap: 8px;">
-                <strong style="font-size: 15px; color: #2563eb;">#${point.sequence_order}: ${point.place_name}</strong>
-                <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; background-color: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 9999px;">Route Point</span>
+                <strong style="font-size: 15px; color: #2563eb;">${point.place_name}</strong>
+                <span style="font-size: 10px; font-weight: bold; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 9999px;">Step ${point.sequence_order}</span>
               </div>
-              ${point.associated_verse_id ? `
-                <div style="margin-bottom: 8px;">
-                  <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Scripture Reference (${point.associated_verse_id})</span>
-                  <div style="font-family: Georgia, serif; font-size: 13px; color: #334155; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; font-style: italic;">
-                    &ldquo;${point.text_en || "Verse text not loaded"}&rdquo;
-                  </div>
-                  ${point.text_original ? `<div style="font-family: Georgia, serif; font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">${point.text_original}</div>` : ""}
+              <div style="margin-bottom: 8px;">
+                <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 2px;">Biblical Connection (${point.associated_verse_id})</span>
+                <div class="popup-draggable-quote" data-ref-id="[ROUTE] ${point.place_name} (${point.associated_verse_id})" style="font-family: Georgia, serif; font-size: 13px; color: #334155; background-color: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; font-style: italic; cursor: grab;">
+                  &ldquo;${point.text_en || "Verse text not loaded"}&rdquo;
                 </div>
-              ` : ""}
+              </div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Coords: ${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}</div>
             </div>
           `;
 
-          const marker = L.marker([point.latitude, point.longitude])
-            .addTo(leafletInstance)
-            .bindPopup(popupContent);
+          const marker = L.marker([point.latitude, point.longitude], {
+            icon: L.divIcon({
+              className: "custom-div-icon",
+              html: `
+                <div style="background-color: #2563eb; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">
+                  ${point.sequence_order}
+                </div>
+              `,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12]
+            })
+          })
+          .bindPopup(popupContent)
+          .addTo(leafletInstance);
+
+          setupDragForMarker(marker, point.place_name, point.latitude, point.longitude, point.associated_verse_id || undefined);
 
           markersRef.current.push(marker);
           group.push([point.latitude, point.longitude]);
@@ -284,12 +367,12 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
           });
         });
 
-        // Draw Polyline connecting the route points in order
+        // Add connecting polyline
         if (group.length > 1) {
           polylineRef.current = L.polyline(group, {
-            color: '#2563eb', // var(--primary)
-            dashArray: '8, 8',
-            weight: 3.5,
+            color: "#2563eb",
+            weight: 3,
+            dashArray: "6, 6",
             opacity: 0.8
           }).addTo(leafletInstance);
         }
@@ -321,12 +404,16 @@ export default function MapView({ book, chapter, onNavigate }: MapViewProps) {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", refId);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: refId, verseText: text } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${placeName}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: refId, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleDragEnd = () => {
-    const dragEndEvent = new CustomEvent("targum-drag-end");
+    const dragEndEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEndEvent);
   };
 

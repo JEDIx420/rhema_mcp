@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, MapPin, Volume2, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
 import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
 import { getBookName } from "@/lib/books";
+import { setGlassDragImage } from "@/lib/drag";
 
 const addDateHeaderIfNeeded = (currentContent: string) => {
   const today = new Date();
@@ -201,7 +202,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
           // Keep current selection
         } else {
           setSelectedSessionId(list[0].session_id);
-          window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
+          window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
             detail: { sessionId: list[0].session_id, title: list[0].title }
           }));
         }
@@ -223,10 +224,10 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       setNewSessionTitle("");
       await loadStudyPaneSessions();
       setSelectedSessionId(res.session_id);
-      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
         detail: { sessionId: res.session_id, title: res.title || newSessionTitle.trim() }
       }));
-      window.dispatchEvent(new CustomEvent("targum-session-updated"));
+      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
     } catch (err) {
       console.error(err);
     }
@@ -244,7 +245,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
       await updateSession(selectedSessionId, active.title, updatedContent);
       setQuickNote("");
       await loadStudyPaneSessions();
-      window.dispatchEvent(new CustomEvent("targum-session-updated"));
+      window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
     } catch (err) {
       console.error(err);
     }
@@ -267,8 +268,8 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
         });
       }
     };
-    window.addEventListener("targum-session-updated", handleSessionUpdated);
-    return () => window.removeEventListener("targum-session-updated", handleSessionUpdated);
+    window.addEventListener("rhelo-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("rhelo-session-updated", handleSessionUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -282,20 +283,24 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
         }
       }
     };
-    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged as any);
-    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged as any);
+    window.addEventListener("rhelo-active-session-changed", handleActiveSessionChanged as any);
+    return () => window.removeEventListener("rhelo-active-session-changed", handleActiveSessionChanged as any);
   }, [selectedSessionId]);
 
   const handleStudyPaneDragStart = (e: React.DragEvent, id: string, text: string) => {
     e.dataTransfer.setData("text/plain", text);
     e.dataTransfer.setData("application/verse-id", id);
     e.dataTransfer.effectAllowed = "copy";
-    const dragEvent = new CustomEvent("targum-drag-start", { detail: { verseId: id, verseText: text } });
+    
+    // Set glassmorphic drag visual feedback
+    setGlassDragImage(e, `${id}`);
+
+    const dragEvent = new CustomEvent("rhelo-drag-start", { detail: { verseId: id, verseText: text } });
     window.dispatchEvent(dragEvent);
   };
 
   const handleStudyPaneDragEnd = () => {
-    const dragEndEvent = new CustomEvent("targum-drag-end");
+    const dragEndEvent = new CustomEvent("rhelo-drag-end");
     window.dispatchEvent(dragEndEvent);
   };
 
@@ -702,7 +707,12 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                           </span>
                         )}
                       </div>
-                      <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-lg border border-slate-150 font-serif">
+                      <p
+                        draggable
+                        onDragStart={(e) => handleStudyPaneDragStart(e, `[LEXICON] ${item.strongs_id} (${item.lemma})`, item.definition)}
+                        onDragEnd={handleStudyPaneDragEnd}
+                        className="text-sm leading-relaxed text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-lg border border-slate-150 font-serif cursor-grab hover:bg-slate-100/50 transition-colors"
+                      >
                         {item.definition}
                       </p>
                     </div>
@@ -765,7 +775,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   setSelectedSessionId(val);
                   const matched = studySessions.find(s => s.session_id === val);
                   if (matched) {
-                    window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
+                    window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
                       detail: { sessionId: val, title: matched.title }
                     }));
                   }

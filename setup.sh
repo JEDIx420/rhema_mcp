@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Rhema Study Engine Setup Script ==="
+echo "=== Targum Study Engine Setup Script ==="
 
 # 1. Setup python virtual environment
 if [ ! -d ".venv" ]; then
@@ -12,8 +12,8 @@ fi
 echo "Installing package dependencies..."
 ./.venv/bin/pip install -r requirements.txt
 
-# 2. Run sequential migrations to build rhema.db from scratch
-echo "Building the Rhema database (rhema.db) by running migrations sequentially..."
+# 2. Run sequential migrations to build targum.db from scratch
+echo "Building the Targum database (targum.db) by running migrations sequentially..."
 
 echo "[0/9] Running New Testament & schema setup..."
 ./.venv/bin/python3 migrations/000_setup_new_testament.py

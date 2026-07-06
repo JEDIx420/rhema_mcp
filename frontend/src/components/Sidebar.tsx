@@ -43,12 +43,9 @@ export default function Sidebar({
       {/* Brand Header - Height strictly matched to top navbar (64px / h-16) */}
       <div className="h-16 w-full px-4.5 border-b border-slate-200 flex items-center shrink-0">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-extrabold shadow-md shrink-0 bg-blue-600 text-white"
-          style={{
-            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
-          }}
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 border border-slate-200/60 shadow-xs"
         >
-          tg
+          <img src="/rhelologo.png" alt="rhelo" className="w-7 h-7 object-contain" />
         </div>
         <AnimatePresence>
           {hovered && (
@@ -61,7 +58,7 @@ export default function Sidebar({
                 backgroundImage: "linear-gradient(to right, #0f172a, #2563eb)",
               }}
             >
-              targum
+              rhelo
             </motion.span>
           )}
         </AnimatePresence>

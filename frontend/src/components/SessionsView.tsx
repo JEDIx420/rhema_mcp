@@ -155,7 +155,7 @@ export default function SessionsView() {
   // Dispatch selection changes globally
   useEffect(() => {
     if (selectedSession) {
-      window.dispatchEvent(new CustomEvent("targum-active-session-changed", {
+      window.dispatchEvent(new CustomEvent("rhelo-active-session-changed", {
         detail: { sessionId: selectedSession.session_id, title: selectedSession.title }
       }));
     }
@@ -175,8 +175,8 @@ export default function SessionsView() {
         }
       }
     };
-    window.addEventListener("targum-active-session-changed", handleActiveSessionChanged);
-    return () => window.removeEventListener("targum-active-session-changed", handleActiveSessionChanged);
+    window.addEventListener("rhelo-active-session-changed", handleActiveSessionChanged);
+    return () => window.removeEventListener("rhelo-active-session-changed", handleActiveSessionChanged);
   }, [sessions, selectedSession]);
 
   // Update editor content when active session changes
@@ -302,8 +302,14 @@ export default function SessionsView() {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
         const fullUrl = `${apiBase}${res.pdf_url}`;
         setExportUrl(fullUrl);
-        // Auto trigger download
-        window.open(fullUrl, "_blank");
+        
+        // Use a hidden anchor element with 'download' attribute to trigger WebView save dialog
+        const link = document.createElement("a");
+        link.href = fullUrl;
+        link.download = `${titleInput || "session"}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
     } catch (err) {
       console.error(err);
@@ -314,10 +320,11 @@ export default function SessionsView() {
 
   const handleDropVerse = (e: React.DragEvent) => {
     e.preventDefault();
+    const jsonVerses = e.dataTransfer.getData("application/json-verses");
     const verseId = e.dataTransfer.getData("application/verse-id");
     const verseText = e.dataTransfer.getData("text/plain");
     
-    if (verseId && verseText && editor) {
+    if (editor) {
       // Ensure date header exists
       const today = new Date();
       const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -328,12 +335,32 @@ export default function SessionsView() {
         editor.commands.setContent(cleanHtml + heading);
       }
 
-      // Append beautifully formatted Quote Block
-      editor.commands.insertContent(
-        `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`
-      );
-      // Trigger autosave
-      triggerAutoSave(editor.getHTML());
+      if (jsonVerses) {
+        try {
+          const parsed = JSON.parse(jsonVerses);
+          // For each active translation, append as a separate blockquote
+          if (parsed.translations && Array.isArray(parsed.translations)) {
+            parsed.translations.forEach((item: { label: string; text: string }) => {
+              editor.commands.insertContent(
+                `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${parsed.verseId} (${item.label})</strong>: &ldquo;${item.text}&rdquo;</blockquote><p></p>`
+              );
+            });
+            triggerAutoSave(editor.getHTML());
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to parse json-verses", err);
+        }
+      }
+
+      if (verseId && verseText) {
+        // Append beautifully formatted Quote Block
+        editor.commands.insertContent(
+          `<blockquote class="border-l-4 border-blue-500 pl-4 my-4 py-1 italic bg-slate-50 rounded-r-lg pr-4 font-serif text-slate-700"><strong>${verseId}</strong>: &ldquo;${verseText}&rdquo;</blockquote><p></p>`
+        );
+        // Trigger autosave
+        triggerAutoSave(editor.getHTML());
+      }
     }
   };
 
