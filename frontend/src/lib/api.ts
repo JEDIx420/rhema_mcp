@@ -6,8 +6,13 @@ const isTauriRuntime = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 const invokeDesktop = async <T>(command: string, args: Record<string, unknown> = {}) => {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(command, args);
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<T>(command, args);
+  } catch (error) {
+    console.error(`[Rhelo IPC] ${command} failed`, error);
+    throw error;
+  }
 };
 
 export function getApiBase() {
@@ -51,153 +56,307 @@ const fetchRhelo = async (input: RequestInfo | URL, init?: RequestInit) => {
   throw lastError instanceof Error ? lastError : new Error("Rhelo backend is unavailable");
 };
 
-export async function fetchChapter(book: string, chapter: number) {
-  const res = await fetchRhelo(apiUrl(`/api/read?book=${book}&chapter=${chapter}`));
-  if (!res.ok) throw new Error("Failed to fetch chapter");
-  return res.json();
+export interface MorphologyWord {
+  word: string;
+  lemma?: string;
+  pos?: string;
+  parse?: string;
+}
+
+export interface ChapterVerse {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  text_en: string;
+  text_original: string;
+  text_hi: string;
+  text_te: string;
+  text_ml: string;
+  text_ta: string;
+  cross_references_count: number;
+  places_count: number;
+  commentaries: string[];
+  morphology: MorphologyWord[];
+}
+
+export interface ChapterResponse {
+  verses: ChapterVerse[];
+  translation_code: string;
+}
+
+export async function fetchChapter(book: string, chapter: number): Promise<ChapterResponse> {
+  return invokeDesktop<ChapterResponse>("fetch_chapter", {
+    book,
+    chapter,
+    translationCode: getStoredEnglishTranslation(),
+  });
+}
+
+export interface ScriptureSearchResult {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  text_en: string;
+  rank: number;
+}
+
+export interface ScriptureSearchResponse {
+  results: ScriptureSearchResult[];
+  total: number;
+  page: number;
+  limit: number;
+  matching_books: string[];
+  matching_testaments: Array<"OT" | "NT">;
+  translation_code: string;
 }
 
 export async function searchScriptures(
   query: string,
   filters?: { book?: string; testament?: string; sort?: string; page?: number; limit?: number }
-) {
-  const params = new URLSearchParams({ q: query });
-  if (filters?.book) params.set("book", filters.book);
-  if (filters?.testament) params.set("testament", filters.testament);
-  if (filters?.sort) params.set("sort", filters.sort);
-  if (filters?.page) params.set("page", String(filters.page));
-  if (filters?.limit) params.set("limit", String(filters.limit));
-
-  const res = await fetchRhelo(apiUrl(`/api/search?${params}`));
-  if (!res.ok) throw new Error("Failed to search");
-  return res.json();
+): Promise<ScriptureSearchResponse> {
+  return invokeDesktop<ScriptureSearchResponse>("search_scripture", {
+    query,
+    book: filters?.book,
+    testament: filters?.testament,
+    sort: filters?.sort,
+    page: filters?.page,
+    limit: filters?.limit,
+    translationCode: getStoredEnglishTranslation(),
+  });
 }
 
-export async function fetchVerseDetails(verseId: string) {
-  const res = await fetchRhelo(apiUrl(`/api/verse?id=${verseId}`));
-  if (!res.ok) throw new Error("Failed to fetch verse details");
-  return res.json();
+export interface VerseDetailsResponse {
+  verse: ChapterVerse;
+  commentaries: Array<{ commentary_id: string; text: string }>;
+  places: Array<{ name: string; latitude: number | null; longitude: number | null; type: string }>;
+  events: Array<{ title: string; year: number; location: string; description: string }>;
+  cross_references: Array<{ to_verse: string; votes: number; text_en: string }>;
+  translation_code: string;
 }
 
-export async function searchLexicon(query: string) {
-  const res = await fetchRhelo(apiUrl(`/api/lexicon?q=${query}`));
-  if (!res.ok) throw new Error("Failed to search lexicon");
-  return res.json();
+export async function fetchVerseDetails(verseId: string): Promise<VerseDetailsResponse> {
+  return invokeDesktop<VerseDetailsResponse>("fetch_verse_details", {
+    verseId,
+    translationCode: getStoredEnglishTranslation(),
+  });
 }
 
-export async function searchTopics(query: string) {
-  const res = await fetchRhelo(apiUrl(`/api/topics?q=${query}`));
-  if (!res.ok) throw new Error("Failed to search topics");
-  return res.json();
+export interface LexiconEntry extends Record<string, string> {
+  strongs_id: string;
+  lemma: string;
+  definition: string;
 }
 
-export async function fetchBiography(personId: string) {
-  const res = await fetchRhelo(apiUrl(`/api/biography?id=${personId}`));
-  if (!res.ok) throw new Error("Failed to fetch biography");
-  return res.json();
+export interface DictionaryEntry extends Record<string, string> {
+  name: string;
+  definition_text: string;
 }
 
-export async function fetchChapterMap(book: string, chapter: number) {
-  const res = await fetchRhelo(apiUrl(`/api/chapter_map?book=${book}&chapter=${chapter}`));
-  if (!res.ok) throw new Error("Failed to fetch map data");
-  return res.json();
+export interface LexiconOccurrence {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  text_en: string;
+  text_original: string;
 }
 
-export async function fetchTimeline() {
-  const res = await fetchRhelo(apiUrl(`/api/timeline`));
-  if (!res.ok) throw new Error("Failed to fetch timeline");
-  return res.json();
+interface NativeLexiconResponse {
+  results: LexiconEntry[];
+  occurrences: LexiconOccurrence[];
+  lexicon: LexiconEntry[];
+  dictionary: DictionaryEntry[];
 }
 
-export async function lookupLexicon(word: string) {
-  const res = await fetchRhelo(apiUrl(`/api/lexicon/lookup?q=${encodeURIComponent(word)}`));
-  if (!res.ok) throw new Error("Failed to lookup word");
-  return res.json();
+export async function searchLexicon(query: string): Promise<Pick<NativeLexiconResponse, "lexicon" | "dictionary">> {
+  return invokeDesktop<NativeLexiconResponse>("lookup_lexicon", {
+    wordId: query,
+    translationCode: getStoredEnglishTranslation(),
+  });
 }
 
-export async function fetchOccurrences(lemma: string) {
-  const res = await fetchRhelo(apiUrl(`/api/lexicon/occurrences?lemma=${encodeURIComponent(lemma)}`));
-  if (!res.ok) throw new Error("Failed to fetch occurrences");
-  return res.json();
+export interface TopicEntry extends Record<string, string> {
+  subject: string;
+  entry: string;
 }
 
-export async function fetchStats() {
-  const res = await fetchRhelo(apiUrl(`/api/stats`));
-  if (!res.ok) throw new Error("Failed to fetch stats");
-  return res.json();
+export interface TopicsResponse {
+  topics: TopicEntry[];
 }
 
-export async function fetchGeographyRoutes() {
-  const res = await fetchRhelo(apiUrl(`/api/geography/routes`));
-  if (!res.ok) throw new Error("Failed to fetch geography routes");
-  return res.json();
+export async function searchTopics(query: string): Promise<TopicsResponse> {
+  return invokeDesktop<TopicsResponse>("fetch_research_meta", {
+    category: "topics",
+    value: query,
+  });
 }
 
-export async function fetchRoutePoints(routeId: string) {
-  const res = await fetchRhelo(apiUrl(`/api/geography/routes/points?route_id=${routeId}`));
-  if (!res.ok) throw new Error("Failed to fetch route points");
-  return res.json();
+export interface BiographyProfile {
+  id: string;
+  name: string;
+  sex: string;
+  tribe: string | null;
+  unique_attribute: string | null;
+  notes: string | null;
+  children_count: number;
+  spouse_count: number;
 }
 
-export async function fetchSessions() {
-  if (isTauriRuntime()) {
-    return invokeDesktop<{ sessions: Array<Record<string, unknown>> }>("fetch_sessions");
-  }
-  const res = await fetchRhelo(apiUrl(`/api/sessions`));
-  if (!res.ok) throw new Error("Failed to fetch sessions");
-  return res.json();
+export interface BiographyRelationship {
+  relationship_type: string;
+  relation_name: string;
+  relation_id: string;
+  relation_sex: string;
+  verse_id: string | null;
+  children_count: number;
+  spouse_count: number;
+}
+
+export interface BiographyResponse {
+  profile: BiographyProfile;
+  relationships: BiographyRelationship[];
+  name_meaning: string | null;
+  error?: string;
+}
+
+export async function fetchBiography(personId: string): Promise<BiographyResponse> {
+  return invokeDesktop<BiographyResponse>("fetch_research_meta", {
+    category: "biography",
+    value: personId,
+  });
+}
+
+export interface ChapterMapPlace {
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  type: string;
+  verse_id: string;
+  text_en: string;
+  text_original: string;
+  meaning: string | null;
+  commentary: string | null;
+  dict_definition: string | null;
+}
+
+export async function fetchChapterMap(book: string, chapter: number): Promise<{ places: ChapterMapPlace[] }> {
+  return invokeDesktop<{ places: ChapterMapPlace[] }>("fetch_chapter_map", {
+    book,
+    chapter,
+    translationCode: getStoredEnglishTranslation(),
+  });
+}
+
+export interface TimelineEvent {
+  event_id: string;
+  title: string;
+  year: number;
+  location: string;
+  description: string;
+  verses: string[];
+}
+
+export interface TimelineResponse {
+  events: TimelineEvent[];
+}
+
+export async function fetchTimeline(): Promise<TimelineResponse> {
+  return invokeDesktop<TimelineResponse>("fetch_research_meta", {
+    category: "timeline",
+  });
+}
+
+export async function lookupLexicon(word: string): Promise<{ results: LexiconEntry[] }> {
+  return invokeDesktop<NativeLexiconResponse>("lookup_lexicon", {
+    wordId: word,
+    translationCode: getStoredEnglishTranslation(),
+  });
+}
+
+export async function fetchOccurrences(lemma: string): Promise<{ occurrences: LexiconOccurrence[] }> {
+  return invokeDesktop<NativeLexiconResponse>("lookup_lexicon", {
+    wordId: lemma,
+    translationCode: getStoredEnglishTranslation(),
+  });
+}
+
+export interface StatsResponse {
+  status: "connected";
+  stats: {
+    verses: number;
+    lexicon: number;
+    dictionaries: number;
+    places: number;
+    events: number;
+    people: number;
+  };
+}
+
+export async function fetchStats(): Promise<StatsResponse> {
+  return invokeDesktop<StatsResponse>("fetch_stats");
+}
+
+export interface GeographyRoute {
+  route_id: string;
+  title: string;
+  description: string;
+}
+
+export async function fetchGeographyRoutes(): Promise<{ routes: GeographyRoute[] }> {
+  return invokeDesktop<{ routes: GeographyRoute[] }>("fetch_geography_routes");
+}
+
+export interface RoutePoint {
+  sequence_order: number;
+  latitude: number;
+  longitude: number;
+  place_name: string;
+  associated_verse_id: string;
+  text_en: string;
+  text_original: string;
+}
+
+export async function fetchRoutePoints(routeId: string): Promise<{ points: RoutePoint[] }> {
+  return invokeDesktop<{ points: RoutePoint[] }>("fetch_route_points", {
+    routeId,
+    translationCode: getStoredEnglishTranslation(),
+  });
+}
+
+export interface SessionRecord {
+  session_id: string;
+  title: string;
+  content: string;
+  updated_at: string;
+}
+
+export async function fetchSessions(): Promise<{ sessions: SessionRecord[] }> {
+  return invokeDesktop<{ sessions: SessionRecord[] }>("fetch_sessions");
 }
 
 export async function createSession(title: string, content: string) {
-  if (isTauriRuntime()) {
-    return invokeDesktop<{ status: string; session_id: string; title: string; content: string }>(
-      "create_session",
-      { title, content },
-    );
-  }
-  const res = await fetchRhelo(apiUrl(`/api/sessions/create`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, content })
-  });
-  if (!res.ok) throw new Error(`Failed to create session: ${await res.text()}`);
-  return res.json();
+  return invokeDesktop<{ status: string; session_id: string; title: string; content: string }>(
+    "create_session",
+    { title, content },
+  );
 }
 
 export async function updateSession(sessionId: string, title: string, content: string) {
-  if (isTauriRuntime()) {
-    return invokeDesktop<{ status: string; session: Record<string, unknown> }>("update_session", {
-      sessionId,
-      title,
-      content,
-    });
-  }
-  const res = await fetchRhelo(apiUrl(`/api/sessions/update`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, title, content })
+  return invokeDesktop<{ status: string; session: SessionRecord }>("update_session", {
+    sessionId,
+    title,
+    content,
   });
-  if (!res.ok) throw new Error(`Failed to update session: ${await res.text()}`);
-  return res.json();
 }
 
 export async function deleteSession(sessionId: string) {
-  if (isTauriRuntime()) {
-    return invokeDesktop<{ status: string; session_id: string }>("delete_session", { sessionId });
-  }
-  const res = await fetchRhelo(apiUrl(`/api/sessions/delete`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId })
-  });
-  if (!res.ok) throw new Error(`Failed to delete session: ${await res.text()}`);
-  return res.json();
+  return invokeDesktop<{ status: string; session_id: string }>("delete_session", { sessionId });
 }
 
-export async function searchSessions(query: string) {
-  const res = await fetchRhelo(apiUrl(`/api/sessions/search?q=${encodeURIComponent(query)}`));
-  if (!res.ok) throw new Error("Failed to search sessions");
-  return res.json();
+export async function searchSessions(query: string): Promise<{ sessions: SessionRecord[] }> {
+  return invokeDesktop<{ sessions: SessionRecord[] }>("search_sessions", { query });
 }
 
 export async function generateSessionPDF(sessionId: string, title: string, content: string) {

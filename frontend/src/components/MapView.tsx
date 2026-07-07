@@ -10,8 +10,8 @@ import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 
 interface MapPlace {
   name: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   type: string;
   verse_id: string;
   text_en?: string;

@@ -53,8 +53,8 @@ interface Commentary {
 
 interface Place {
   name: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   type: string;
 }
 
@@ -628,7 +628,9 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                         <span className="text-[11px] block text-slate-500 font-sans truncate">{p.type}</span>
                       </div>
                       <span className="ml-auto font-mono text-[10px] text-slate-400 shrink-0">
-                        {p.latitude.toFixed(2)}, {p.longitude.toFixed(2)}
+                        {p.latitude != null && p.longitude != null
+                          ? `${p.latitude.toFixed(2)}, ${p.longitude.toFixed(2)}`
+                          : "No coordinates"}
                       </span>
                     </div>
                   ))}

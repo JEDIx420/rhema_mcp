@@ -39,10 +39,10 @@ try {
     failures.push(`The ARM64 Python sidecar is empty or incomplete: ${sidecarPath}`);
   }
 
-  const backendSources = [resolve("..", "server.py")];
+  const backendSources = [resolve("..", "server.py"), resolve("..", "server.spec")];
   const backendRoot = resolve("..", "rhelo_backend");
   for (const entry of readdirSync(backendRoot, { recursive: true, withFileTypes: true })) {
-    if (entry.isFile() && entry.name.endsWith(".py")) {
+    if (entry.isFile() && [".py", ".ttf", ".txt"].some((suffix) => entry.name.endsWith(suffix))) {
       backendSources.push(resolve(entry.parentPath, entry.name));
     }
   }

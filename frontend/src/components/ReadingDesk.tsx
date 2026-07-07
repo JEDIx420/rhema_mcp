@@ -88,7 +88,7 @@ interface Verse {
 interface VerseDetail {
   verse: Verse;
   commentaries: { commentary_id: string; text: string }[];
-  places: { name: string; latitude: number; longitude: number; type: string }[];
+  places: { name: string; latitude: number | null; longitude: number | null; type: string }[];
   events: { title: string; year: number; location: string; description: string }[];
   cross_references: { to_verse: string; votes: number; text_en?: string }[];
 }

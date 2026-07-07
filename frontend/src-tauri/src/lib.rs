@@ -10,12 +10,14 @@ use tauri_plugin_shell::ShellExt;
 use tts::Tts;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+mod research;
+
 struct WhisperModelState {
     context: Mutex<Option<WhisperContext>>,
     initialization_error: Option<String>,
 }
 
-struct DatabaseState {
+pub(crate) struct DatabaseState {
     path: PathBuf,
 }
 
@@ -56,6 +58,46 @@ struct DeleteSessionResponse {
     session_id: String,
 }
 
+#[derive(Debug, Serialize)]
+struct ChapterVerse {
+    id: String,
+    book: String,
+    chapter: i64,
+    verse: i64,
+    text_en: String,
+    text_original: String,
+    text_hi: String,
+    text_te: String,
+    text_ml: String,
+    text_ta: String,
+    cross_references_count: i64,
+    places_count: i64,
+    commentaries: Vec<String>,
+    morphology: serde_json::Value,
+}
+
+struct ChapterVerseRecord {
+    id: String,
+    book: String,
+    chapter: i64,
+    verse: i64,
+    text_en: Option<String>,
+    text_original: Option<String>,
+    text_hi: Option<String>,
+    text_te: Option<String>,
+    text_ml: Option<String>,
+    text_ta: Option<String>,
+    cross_references_count: i64,
+    places_count: i64,
+    morphology: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ChapterResponse {
+    verses: Vec<ChapterVerse>,
+    translation_code: &'static str,
+}
+
 #[derive(Deserialize)]
 struct BackendHealth {
     status: String,
@@ -63,7 +105,7 @@ struct BackendHealth {
     boot_token: String,
 }
 
-fn open_database(path: &Path) -> Result<Connection, String> {
+pub(crate) fn open_database(path: &Path) -> Result<Connection, String> {
     let connection = Connection::open(path)
         .map_err(|error| format!("Failed to open the Rhelo database: {error}"))?;
     connection
@@ -91,6 +133,120 @@ fn read_session(connection: &Connection, session_id: &str) -> Result<Option<Sess
         )
         .optional()
         .map_err(|error| format!("Failed to read the study session: {error}"))
+}
+
+pub(crate) fn normalize_english_translation(translation_code: Option<&str>) -> &'static str {
+    match translation_code {
+        Some("en_web") => "en_web",
+        Some("en_kjv") => "en_kjv",
+        _ => "en_bsb",
+    }
+}
+
+#[tauri::command]
+fn fetch_chapter(
+    book: String,
+    chapter: i64,
+    translation_code: Option<String>,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<ChapterResponse, String> {
+    let book = book.trim().to_ascii_uppercase();
+    if book.is_empty() {
+        return Err("A Scripture book code is required.".to_string());
+    }
+    if chapter < 1 {
+        return Err("The chapter number must be greater than zero.".to_string());
+    }
+
+    let translation_code = normalize_english_translation(translation_code.as_deref());
+    let connection = open_database(&state.path)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT
+                v.id,
+                v.book,
+                v.chapter,
+                v.verse,
+                COALESCE(et.text, v.text_en) AS active_text_en,
+                v.text_original,
+                v.text_hi,
+                v.text_te,
+                v.text_ml,
+                v.text_ta,
+                (SELECT COUNT(*) FROM cross_references cr WHERE cr.from_verse = v.id),
+                (SELECT COUNT(*) FROM verse_geography vg WHERE vg.verse_id = v.id),
+                v.morphology
+             FROM verses v
+             LEFT JOIN verse_translations et
+               ON et.verse_id = v.id AND et.translation_code = ?1
+             WHERE v.book = ?2 AND v.chapter = ?3
+             ORDER BY v.verse",
+        )
+        .map_err(|error| format!("Failed to prepare the chapter query: {error}"))?;
+
+    let records = statement
+        .query_map(params![translation_code, book, chapter], |row| {
+            Ok(ChapterVerseRecord {
+                id: row.get(0)?,
+                book: row.get(1)?,
+                chapter: row.get(2)?,
+                verse: row.get(3)?,
+                text_en: row.get(4)?,
+                text_original: row.get(5)?,
+                text_hi: row.get(6)?,
+                text_te: row.get(7)?,
+                text_ml: row.get(8)?,
+                text_ta: row.get(9)?,
+                cross_references_count: row.get(10)?,
+                places_count: row.get(11)?,
+                morphology: row.get(12)?,
+            })
+        })
+        .map_err(|error| format!("Failed to read {book} {chapter}: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode {book} {chapter}: {error}"))?;
+    drop(statement);
+
+    let mut commentary_statement = connection
+        .prepare("SELECT text FROM commentaries WHERE verse_id = ?1")
+        .map_err(|error| format!("Failed to prepare the commentary query: {error}"))?;
+    let mut verses = Vec::with_capacity(records.len());
+
+    for record in records {
+        let commentaries = commentary_statement
+            .query_map([&record.id], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("Failed to read commentaries for {}: {error}", record.id))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Failed to decode commentaries for {}: {error}", record.id))?;
+        let morphology = record
+            .morphology
+            .as_deref()
+            .and_then(|value| serde_json::from_str(value).ok())
+            .filter(serde_json::Value::is_array)
+            .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
+
+        verses.push(ChapterVerse {
+            id: record.id,
+            book: record.book,
+            chapter: record.chapter,
+            verse: record.verse,
+            text_en: record.text_en.unwrap_or_default(),
+            text_original: record.text_original.unwrap_or_default(),
+            text_hi: record.text_hi.unwrap_or_default(),
+            text_te: record.text_te.unwrap_or_default(),
+            text_ml: record.text_ml.unwrap_or_default(),
+            text_ta: record.text_ta.unwrap_or_default(),
+            cross_references_count: record.cross_references_count,
+            places_count: record.places_count,
+            commentaries,
+            morphology,
+        });
+    }
+
+    Ok(ChapterResponse {
+        verses,
+        translation_code,
+    })
 }
 
 #[tauri::command]
@@ -406,45 +562,60 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
-                app.handle().plugin(
+                if let Err(err) = app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
                         .build(),
-                )?;
+                ) {
+                    eprintln!("BOOT DIAGNOSTIC: failed to initialize logging: {err:?}");
+                }
             }
 
-            let database_path = prepare_database(app).map_err(std::io::Error::other)?;
-            app.manage(DatabaseState {
-                path: database_path.clone(),
-            });
+            match prepare_database(app) {
+                Ok(database_path) => {
+                    app.manage(DatabaseState {
+                        path: database_path.clone(),
+                    });
 
-            let sidecar_child = match spawn_sidecar(app, &database_path) {
-                Ok(child) => child,
-                Err(err_msg) => {
+                    match spawn_sidecar(app, &database_path) {
+                        Ok(sidecar_child) => {
+                            app.manage(SidecarState {
+                                child: Mutex::new(Some(sidecar_child)),
+                            });
+
+                            if let Ok(mut home) = app.path().home_dir() {
+                                home.push("rhelo_boot_error.log");
+                                let _ = std::fs::remove_file(home);
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("CRITICAL BOOT ERROR: {:?}", err);
+                            if let Ok(mut home) = app.path().home_dir() {
+                                home.push("rhelo_boot_error.log");
+                                let log_content = format!("Boot Error: {err}\n");
+                                let _ = std::fs::write(home, log_content);
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("CRITICAL BOOT ERROR: {:?}", err);
                     if let Ok(mut home) = app.path().home_dir() {
                         home.push("rhelo_boot_error.log");
-                        let log_content = format!("Boot Error: {}\n", err_msg);
+                        let log_content = format!("Boot Error: {err}\n");
                         let _ = std::fs::write(home, log_content);
                     }
-                    return Err(std::io::Error::other(err_msg).into());
                 }
-            };
-            app.manage(SidecarState {
-                child: Mutex::new(Some(sidecar_child)),
-            });
-
-            if let Ok(mut home) = app.path().home_dir() {
-                home.push("rhelo_boot_error.log");
-                let _ = std::fs::remove_file(home);
             }
 
             // 1. Initialize native TTS and manage it in Tauri State
-            if let Ok(tts_instance) = Tts::default() {
-                app.manage(Mutex::new(tts_instance));
-            } else {
-                // Fallback if system speech init fails
-                let tts_instance = Tts::default().expect("TTS initialization is required");
-                app.manage(Mutex::new(tts_instance));
+            match Tts::default() {
+                Ok(tts_instance) => {
+                    app.manage(Mutex::new(tts_instance));
+                }
+                Err(err) => {
+                    eprintln!("BOOT DIAGNOSTIC: failed to initialize TTS: {err:?}");
+                }
             }
 
             // 2. Resolve and load Whisper model context
@@ -487,13 +658,27 @@ pub fn run() {
             });
 
             if let Some(window) = app.get_webview_window("main") {
-                window.show()?;
-                window.set_focus()?;
+                if let Err(err) = window.show() {
+                    eprintln!("BOOT DIAGNOSTIC: failed to show the main window: {err:?}");
+                }
+                if let Err(err) = window.set_focus() {
+                    eprintln!("BOOT DIAGNOSTIC: failed to focus the main window: {err:?}");
+                }
             }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            fetch_chapter,
+            research::search_scripture,
+            research::lookup_lexicon,
+            research::fetch_research_meta,
+            research::fetch_verse_details,
+            research::fetch_chapter_map,
+            research::fetch_geography_routes,
+            research::fetch_route_points,
+            research::fetch_stats,
+            research::search_sessions,
             fetch_sessions,
             create_session,
             update_session,

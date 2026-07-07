@@ -153,6 +153,17 @@ export default function SessionsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Refresh the active editor when another workflow updates a session (for example, STT).
+  useEffect(() => {
+    const handleSessionUpdated = () => {
+      void loadSessions();
+    };
+
+    window.addEventListener("rhelo-session-updated", handleSessionUpdated);
+    return () => window.removeEventListener("rhelo-session-updated", handleSessionUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep ref in sync with titleInput state
   useEffect(() => {
     titleInputRef.current = titleInput;
