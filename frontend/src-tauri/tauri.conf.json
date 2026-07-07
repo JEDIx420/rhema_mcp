@@ -37,11 +37,15 @@
     ],
     "resources": {
       "../../rhelo.db": "rhelo.db",
-      "../../ggml-base.bin": "ggml-base.bin"
+      "../../ggml-base.bin": "ggml-base.bin",
+      "resources/fonts/NotoSans-Regular.ttf": "fonts/NotoSans-Regular.ttf",
+      "resources/fonts/NotoSansHebrew-Regular.ttf": "fonts/NotoSansHebrew-Regular.ttf",
+      "resources/fonts/NotoSansDevanagari-Regular.ttf": "fonts/NotoSansDevanagari-Regular.ttf",
+      "resources/fonts/NotoSansTelugu-Regular.ttf": "fonts/NotoSansTelugu-Regular.ttf",
+      "resources/fonts/NotoSansMalayalam-Regular.ttf": "fonts/NotoSansMalayalam-Regular.ttf",
+      "resources/fonts/NotoSansTamil-Regular.ttf": "fonts/NotoSansTamil-Regular.ttf",
+      "resources/fonts/LICENSE-NOTO.txt": "fonts/LICENSE-NOTO.txt"
     },
-    "externalBin": [
-      "binaries/server"
-    ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
     },

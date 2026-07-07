@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import { 
   fetchSessions, 
-  getApiBase,
   createSession, 
   updateSession, 
   deleteSession, 
@@ -87,6 +86,12 @@ export default function SessionsView() {
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [pdfViewer, setPdfViewer] = useState<{ url: string; filename: string } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exportUrl) URL.revokeObjectURL(exportUrl);
+    };
+  }, [exportUrl]);
   const [titleInput, setTitleInput] = useState("");
   const titleInputRef = useRef(titleInput);
   const selectedSessionRef = useRef<Session | null>(null);
@@ -315,17 +320,16 @@ export default function SessionsView() {
   const handleExportPDF = async () => {
     if (!selectedSession || !editor) return;
     setExporting(true);
-    setExportUrl(null);
     try {
       const htmlContent = editor.getHTML();
-      const res = await generateSessionPDF(selectedSession.session_id, titleInput, htmlContent);
-      if (res.status === "success" && res.pdf_url) {
-        // Since we are running in local source dev mode, prepend the server host
-        const apiBase = getApiBase();
-        const fullUrl = `${apiBase}${res.pdf_url}`;
-        setExportUrl(fullUrl);
-        setPdfViewer({ url: fullUrl, filename: `${titleInput || "session"}.pdf` });
-      }
+      const bytes = await generateSessionPDF(titleInput, htmlContent);
+      const pdfBuffer = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ) as ArrayBuffer;
+      const objectUrl = URL.createObjectURL(new Blob([pdfBuffer], { type: "application/pdf" }));
+      setExportUrl(objectUrl);
+      setPdfViewer({ url: objectUrl, filename: `${titleInput || "session"}.pdf` });
     } catch (err) {
       console.error(err);
     } finally {

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1CCE1E00000000000000002 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1CCE1E00000000000000001 /* Accelerate.framework */; };
 		3CD714AC0CA7B50CCB2B782E /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 027BF146D46E882265718804 /* assets */; };
 		4AAA3CE57E72E0129D13FF38 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 60AFF91886D974F718AE055F /* QuartzCore.framework */; };
 		5E51551EC17A32C71A12DB7C /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E9D2FCE7718ABA03D59540D7 /* Security.framework */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A1CCE1E00000000000000001 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		025FE430345DF9B0A147BB50 /* rhelo_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = rhelo_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		027BF146D46E882265718804 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		0A2A1512C0A65FC82A29C58A /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -48,6 +50,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F03BAF740396C1740C059D1A /* libapp.a in Frameworks */,
+				A1CCE1E00000000000000002 /* Accelerate.framework in Frameworks */,
 				76B104F3C8AC41118E87D5D4 /* CoreGraphics.framework in Frameworks */,
 				96BE6DD731F669B98FE3B332 /* Metal.framework in Frameworks */,
 				7FB3F5EA6EC5613CE3718E94 /* MetalKit.framework in Frameworks */,
@@ -106,6 +109,7 @@
 		3A76F38308E0B2812BF94A0A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A1CCE1E00000000000000001 /* Accelerate.framework */,
 				0A2A1512C0A65FC82A29C58A /* CoreGraphics.framework */,
 				6D6C654F7DEE527147338EF2 /* libapp.a */,
 				1CF010917D9E8C7709C03EC5 /* Metal.framework */,

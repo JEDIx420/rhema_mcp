@@ -1,12 +1,9 @@
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tauri::Manager;
-use tauri_plugin_shell::process::CommandChild;
-use tauri_plugin_shell::ShellExt;
 use tts::Tts;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -19,10 +16,6 @@ struct WhisperModelState {
 
 pub(crate) struct DatabaseState {
     path: PathBuf,
-}
-
-struct SidecarState {
-    child: Mutex<Option<CommandChild>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,13 +89,6 @@ struct ChapterVerseRecord {
 struct ChapterResponse {
     verses: Vec<ChapterVerse>,
     translation_code: &'static str,
-}
-
-#[derive(Deserialize)]
-struct BackendHealth {
-    status: String,
-    database_path: String,
-    boot_token: String,
 }
 
 pub(crate) fn open_database(path: &Path) -> Result<Connection, String> {
@@ -355,50 +341,6 @@ fn delete_session(
     })
 }
 
-fn wait_for_backend(
-    port: u16,
-    expected_database: &Path,
-    boot_token: &str,
-    timeout: Duration,
-) -> Result<(), String> {
-    let address = format!("127.0.0.1:{port}")
-        .parse()
-        .map_err(|error| format!("Invalid backend address: {error}"))?;
-    let started = Instant::now();
-
-    while started.elapsed() < timeout {
-        if let Ok(mut stream) =
-            std::net::TcpStream::connect_timeout(&address, Duration::from_millis(200))
-        {
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-            let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
-            if stream
-                .write_all(
-                    b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-                )
-                .is_ok()
-            {
-                let mut response = String::new();
-                if stream.read_to_string(&mut response).is_ok() {
-                    if let Some(body) = response.split("\r\n\r\n").nth(1) {
-                        if let Ok(health) = serde_json::from_str::<BackendHealth>(body) {
-                            if health.status == "ready"
-                                && health.boot_token == boot_token
-                                && Path::new(&health.database_path) == expected_database
-                            {
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-
-    Err("Rhelo's local study service did not become ready in time.".to_string())
-}
-
 fn prepare_database(app: &mut tauri::App) -> Result<PathBuf, String> {
     // 1. Resolve source and destination DB paths
     let db_src = app
@@ -426,28 +368,6 @@ fn prepare_database(app: &mut tauri::App) -> Result<PathBuf, String> {
     }
 
     Ok(db_dest)
-}
-
-fn spawn_sidecar(app: &mut tauri::App, db_path: &Path) -> Result<CommandChild, String> {
-    let boot_token = uuid::Uuid::new_v4().to_string();
-    let sidecar = app
-        .shell()
-        .sidecar("server")
-        .map_err(|e| format!("Failed to create sidecar command: {}", e))?
-        .env("RHELO_DB_PATH", db_path.to_string_lossy().to_string())
-        .env("RHELO_API_PORT", "5050")
-        .env("RHELO_BOOT_TOKEN", &boot_token)
-        .env("RHELO_MODE", "http");
-
-    let (_rx, child) = sidecar
-        .spawn()
-        .map_err(|e| format!("Failed to spawn sidecar server: {}", e))?;
-
-    if let Err(error) = wait_for_backend(5050, db_path, &boot_token, Duration::from_secs(30)) {
-        let _ = child.kill();
-        return Err(error);
-    }
-    Ok(child)
 }
 
 #[tauri::command]
@@ -557,7 +477,6 @@ async fn transcribe_audio(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -574,28 +493,11 @@ pub fn run() {
             match prepare_database(app) {
                 Ok(database_path) => {
                     app.manage(DatabaseState {
-                        path: database_path.clone(),
+                        path: database_path,
                     });
-
-                    match spawn_sidecar(app, &database_path) {
-                        Ok(sidecar_child) => {
-                            app.manage(SidecarState {
-                                child: Mutex::new(Some(sidecar_child)),
-                            });
-
-                            if let Ok(mut home) = app.path().home_dir() {
-                                home.push("rhelo_boot_error.log");
-                                let _ = std::fs::remove_file(home);
-                            }
-                        }
-                        Err(err) => {
-                            eprintln!("CRITICAL BOOT ERROR: {:?}", err);
-                            if let Ok(mut home) = app.path().home_dir() {
-                                home.push("rhelo_boot_error.log");
-                                let log_content = format!("Boot Error: {err}\n");
-                                let _ = std::fs::write(home, log_content);
-                            }
-                        }
+                    if let Ok(mut home) = app.path().home_dir() {
+                        home.push("rhelo_boot_error.log");
+                        let _ = std::fs::remove_file(home);
                     }
                 }
                 Err(err) => {
@@ -679,6 +581,7 @@ pub fn run() {
             research::fetch_route_points,
             research::fetch_stats,
             research::search_sessions,
+            research::generate_session_pdf,
             fetch_sessions,
             create_session,
             update_session,
@@ -689,15 +592,5 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
-                if let Some(sidecar) = app_handle.try_state::<SidecarState>() {
-                    if let Ok(mut child) = sidecar.child.lock() {
-                        if let Some(child) = child.take() {
-                            let _ = child.kill();
-                        }
-                    }
-                }
-            }
-        });
+        .run(|_, _| {});
 }

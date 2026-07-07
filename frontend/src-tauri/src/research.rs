@@ -3,7 +3,8 @@ use regex::{Regex, RegexBuilder};
 use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use tauri::Manager;
 use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 
 const OLD_TESTAMENT: &[&str] = &[
@@ -1321,10 +1322,336 @@ pub(crate) fn search_sessions(
     Ok(SessionSearchResponse { sessions })
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum PdfFontKind {
+    Base,
+    Hebrew,
+    Devanagari,
+    Telugu,
+    Malayalam,
+    Tamil,
+}
+
+const PDF_FONTS: &[(PdfFontKind, &str)] = &[
+    (PdfFontKind::Base, "NotoSans-Regular.ttf"),
+    (PdfFontKind::Hebrew, "NotoSansHebrew-Regular.ttf"),
+    (PdfFontKind::Devanagari, "NotoSansDevanagari-Regular.ttf"),
+    (PdfFontKind::Telugu, "NotoSansTelugu-Regular.ttf"),
+    (PdfFontKind::Malayalam, "NotoSansMalayalam-Regular.ttf"),
+    (PdfFontKind::Tamil, "NotoSansTamil-Regular.ttf"),
+];
+
+#[derive(Debug)]
+struct PdfBlock {
+    text: String,
+    heading_level: u8,
+}
+
+fn decode_html_entities(value: &str) -> String {
+    value
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+}
+
+fn session_html_to_blocks(content: &str) -> Vec<PdfBlock> {
+    let mut text = content.to_string();
+    for (pattern, replacement) in [
+        (r"(?is)<h1[^>]*>", "\n# "),
+        (r"(?is)<h2[^>]*>", "\n## "),
+        (r"(?is)<h3[^>]*>", "\n### "),
+        (r"(?is)<blockquote[^>]*>", "\n> "),
+        (r"(?is)<li[^>]*>", "\n• "),
+        (r"(?is)<br\s*/?>", "\n"),
+        (r"(?is)</(p|div|h1|h2|h3|blockquote|li|ul|ol)>", "\n"),
+    ] {
+        text = Regex::new(pattern)
+            .expect("the PDF HTML normalization patterns are valid")
+            .replace_all(&text, replacement)
+            .into_owned();
+    }
+    text = Regex::new(r"(?is)<[^>]+>")
+        .expect("the PDF tag pattern is valid")
+        .replace_all(&text, "")
+        .into_owned();
+
+    decode_html_entities(&text)
+        .lines()
+        .filter_map(|line| {
+            let normalized = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            if normalized.is_empty() {
+                return None;
+            }
+            let (heading_level, text) = if let Some(value) = normalized.strip_prefix("### ") {
+                (3, value)
+            } else if let Some(value) = normalized.strip_prefix("## ") {
+                (2, value)
+            } else if let Some(value) = normalized.strip_prefix("# ") {
+                (1, value)
+            } else {
+                (0, normalized.as_str())
+            };
+            Some(PdfBlock {
+                text: text.to_string(),
+                heading_level,
+            })
+        })
+        .collect()
+}
+
+fn font_kind_for_char(character: char) -> PdfFontKind {
+    match character as u32 {
+        0x0590..=0x05FF => PdfFontKind::Hebrew,
+        0x0900..=0x097F => PdfFontKind::Devanagari,
+        0x0B80..=0x0BFF => PdfFontKind::Tamil,
+        0x0C00..=0x0C7F => PdfFontKind::Telugu,
+        0x0D00..=0x0D7F => PdfFontKind::Malayalam,
+        _ => PdfFontKind::Base,
+    }
+}
+
+fn font_runs(text: &str) -> Vec<(PdfFontKind, String)> {
+    let mut runs: Vec<(PdfFontKind, String)> = Vec::new();
+    for character in text.chars() {
+        let kind = font_kind_for_char(character);
+        if let Some((last_kind, value)) = runs.last_mut() {
+            if *last_kind == kind || (character.is_whitespace() && *last_kind != PdfFontKind::Base)
+            {
+                value.push(character);
+                continue;
+            }
+        }
+        runs.push((kind, character.to_string()));
+    }
+    runs
+}
+
+fn mostly_hebrew(text: &str) -> bool {
+    let visible = text
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .count();
+    let hebrew = text
+        .chars()
+        .filter(|character| matches!(*character as u32, 0x0590..=0x05FF))
+        .count();
+    visible > 0 && hebrew * 2 >= visible
+}
+
+fn reverse_rtl_clusters(text: &str) -> String {
+    let mut clusters: Vec<String> = Vec::new();
+    for character in text.chars() {
+        if is_combining_mark(character) {
+            if let Some(cluster) = clusters.last_mut() {
+                cluster.push(character);
+                continue;
+            }
+        }
+        clusters.push(character.to_string());
+    }
+    clusters.reverse();
+    clusters.concat()
+}
+
+fn wrap_pdf_text(text: &str, max_characters: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let projected =
+            current.chars().count() + usize::from(!current.is_empty()) + word.chars().count();
+        if projected > max_characters && !current.is_empty() {
+            lines.push(current);
+            current = String::new();
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn pdf_color(red: u8, green: u8, blue: u8) -> printpdf::Color {
+    printpdf::Color::Rgb(printpdf::Rgb::new(
+        red as f32 / 255.0,
+        green as f32 / 255.0,
+        blue as f32 / 255.0,
+        None,
+    ))
+}
+
+fn push_pdf_line(
+    operations: &mut Vec<printpdf::Op>,
+    text: &str,
+    y_mm: f32,
+    size: f32,
+    color: printpdf::Color,
+    fonts: &BTreeMap<PdfFontKind, printpdf::FontId>,
+) {
+    let rtl = mostly_hebrew(text);
+    let rendered = if rtl {
+        reverse_rtl_clusters(text)
+    } else {
+        text.to_string()
+    };
+    let estimated_width_mm = rendered.chars().count() as f32 * size * 0.19;
+    let x_mm = if rtl {
+        (192.0 - estimated_width_mm).max(18.0)
+    } else {
+        18.0
+    };
+
+    operations.push(printpdf::Op::StartTextSection);
+    operations.push(printpdf::Op::SetTextCursor {
+        pos: printpdf::Point::new(printpdf::Mm(x_mm), printpdf::Mm(y_mm)),
+    });
+    operations.push(printpdf::Op::SetFillColor { col: color });
+    for (kind, value) in font_runs(&rendered) {
+        if let Some(font_id) = fonts.get(&kind).or_else(|| fonts.get(&PdfFontKind::Base)) {
+            operations.push(printpdf::Op::SetFont {
+                font: printpdf::PdfFontHandle::External(font_id.clone()),
+                size: printpdf::Pt(size),
+            });
+            operations.push(printpdf::Op::ShowText {
+                items: vec![printpdf::TextItem::Text(value)],
+            });
+        }
+    }
+    operations.push(printpdf::Op::EndTextSection);
+}
+
+fn finish_pdf_page(
+    pages: &mut Vec<printpdf::PdfPage>,
+    mut operations: Vec<printpdf::Op>,
+    fonts: &BTreeMap<PdfFontKind, printpdf::FontId>,
+) {
+    let page_number = pages.len() + 1;
+    push_pdf_line(
+        &mut operations,
+        &format!("rhelo · {page_number}"),
+        10.0,
+        8.0,
+        pdf_color(100, 116, 139),
+        fonts,
+    );
+    pages.push(printpdf::PdfPage::new(
+        printpdf::Mm(210.0),
+        printpdf::Mm(297.0),
+        operations,
+    ));
+}
+
+fn render_session_pdf(
+    title: &str,
+    content: &str,
+    font_bytes: BTreeMap<PdfFontKind, Vec<u8>>,
+) -> Result<Vec<u8>, String> {
+    let mut document = printpdf::PdfDocument::new(title);
+    let mut font_warnings = Vec::new();
+    let mut fonts = BTreeMap::new();
+    for (kind, bytes) in font_bytes {
+        let parsed = printpdf::ParsedFont::from_bytes(&bytes, 0, &mut font_warnings)
+            .ok_or_else(|| format!("Failed to parse the bundled {kind:?} PDF font"))?;
+        fonts.insert(kind, document.add_font(&parsed));
+    }
+
+    let mut pages = Vec::new();
+    let mut operations = Vec::new();
+    let mut y_mm = 278.0;
+    push_pdf_line(
+        &mut operations,
+        "RHELO · STUDY SESSION",
+        y_mm,
+        8.5,
+        pdf_color(37, 99, 235),
+        &fonts,
+    );
+    y_mm -= 12.0;
+    for line in wrap_pdf_text(title, 42) {
+        push_pdf_line(
+            &mut operations,
+            &line,
+            y_mm,
+            24.0,
+            pdf_color(15, 23, 42),
+            &fonts,
+        );
+        y_mm -= 11.0;
+    }
+    y_mm -= 5.0;
+
+    for block in session_html_to_blocks(content) {
+        let (size, line_height, color, width) = match block.heading_level {
+            1 => (18.0, 9.0, pdf_color(15, 23, 42), 50),
+            2 => (15.0, 8.0, pdf_color(15, 23, 42), 60),
+            3 => (13.0, 7.5, pdf_color(37, 99, 235), 68),
+            _ => (11.0, 6.5, pdf_color(51, 65, 85), 82),
+        };
+        if block.heading_level > 0 {
+            y_mm -= 2.0;
+        }
+        for line in wrap_pdf_text(&block.text, width) {
+            if y_mm < 22.0 {
+                finish_pdf_page(&mut pages, operations, &fonts);
+                operations = Vec::new();
+                y_mm = 278.0;
+            }
+            push_pdf_line(&mut operations, &line, y_mm, size, color.clone(), &fonts);
+            y_mm -= line_height;
+        }
+        y_mm -= if block.heading_level > 0 { 2.0 } else { 3.0 };
+    }
+
+    finish_pdf_page(&mut pages, operations, &fonts);
+    document.with_pages(pages);
+    Ok(document.save(&printpdf::PdfSaveOptions::default(), &mut Vec::new()))
+}
+
+/// Generates a self-contained PDF in memory so the frontend can preview it and
+/// let the native Tauri save dialog choose the final destination.
+#[tauri::command]
+pub(crate) fn generate_session_pdf(
+    title: String,
+    content: String,
+    app: tauri::AppHandle,
+) -> Result<Vec<u8>, String> {
+    let title = title.trim();
+    let safe_title = if title.is_empty() {
+        "Study Session"
+    } else {
+        title
+    };
+
+    let mut fonts = BTreeMap::new();
+    for (kind, filename) in PDF_FONTS {
+        let resource_name = format!("fonts/{filename}");
+        let font_path = app
+            .path()
+            .resolve(&resource_name, tauri::path::BaseDirectory::Resource)
+            .map_err(|error| format!("Failed to resolve PDF font {filename}: {error}"))?;
+        let bytes = std::fs::read(&font_path)
+            .map_err(|error| format!("Failed to load PDF font at {:?}: {error}", font_path))?;
+        fonts.insert(*kind, bytes);
+    }
+
+    render_session_pdf(safe_title, &content, fonts)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{find_matching_strongs, normalize_lexicon_text};
+    use super::{find_matching_strongs, normalize_lexicon_text, render_session_pdf, PDF_FONTS};
     use rusqlite::Connection;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     #[test]
@@ -1340,5 +1667,27 @@ mod tests {
         let matches = find_matching_strongs(&connection, "בְּרֵאשִׁית")
             .expect("normalized lexicon lookup should succeed");
         assert!(matches.iter().any(|strongs_id| strongs_id == "H7225"));
+    }
+
+    #[test]
+    fn renders_multilingual_session_pdf() {
+        let font_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fonts");
+        let fonts = PDF_FONTS
+            .iter()
+            .map(|(kind, filename)| {
+                let bytes = std::fs::read(font_root.join(filename))
+                    .unwrap_or_else(|error| panic!("failed to load {filename}: {error}"));
+                (*kind, bytes)
+            })
+            .collect::<BTreeMap<_, _>>();
+        let bytes = render_session_pdf(
+            "Languages",
+            "<p>English · Ελληνικά · עברית</p><p>हिन्दी · తెలుగు · മലയാളം · தமிழ்</p>",
+            fonts,
+        )
+        .expect("multilingual PDF should render");
+
+        assert!(bytes.starts_with(b"%PDF"));
+        assert!(bytes.len() > 1_000);
     }
 }

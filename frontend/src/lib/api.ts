@@ -1,10 +1,5 @@
 import { getStoredEnglishTranslation } from "@/lib/englishTranslations";
 
-const WEB_API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5050";
-
-const isTauriRuntime = () =>
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
 const invokeDesktop = async <T>(command: string, args: Record<string, unknown> = {}) => {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -13,47 +8,6 @@ const invokeDesktop = async <T>(command: string, args: Record<string, unknown> =
     console.error(`[Rhelo IPC] ${command} failed`, error);
     throw error;
   }
-};
-
-export function getApiBase() {
-  if (typeof window === "undefined") return WEB_API_BASE;
-  if (isTauriRuntime()) return WEB_API_BASE;
-  const stored = window.localStorage.getItem("rhelo-api-base");
-  return stored || WEB_API_BASE;
-}
-
-export function setApiBase(value: string) {
-  if (isTauriRuntime()) return WEB_API_BASE;
-  const normalized = value.trim().replace(/\/$/, "");
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem("rhelo-api-base", normalized || WEB_API_BASE);
-  }
-  return normalized || WEB_API_BASE;
-}
-
-const apiUrl = (path: string) => {
-  const separator = path.includes("?") ? "&" : "?";
-  return `${getApiBase()}${path}${separator}translation=${getStoredEnglishTranslation()}`;
-};
-
-const fetchRhelo = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const isReadRequest = !init?.method || init.method.toUpperCase() === "GET";
-  const isDesktop = isTauriRuntime();
-  const attempts = isReadRequest && isDesktop ? 12 : 1;
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await globalThis.fetch(input, isReadRequest ? { ...init, cache: "no-store" } : init);
-    } catch (error) {
-      lastError = error;
-      if (attempt + 1 < attempts) {
-        await new Promise((resolve) => window.setTimeout(resolve, 250));
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Rhelo backend is unavailable");
 };
 
 export interface MorphologyWord {
@@ -359,35 +313,7 @@ export async function searchSessions(query: string): Promise<{ sessions: Session
   return invokeDesktop<{ sessions: SessionRecord[] }>("search_sessions", { query });
 }
 
-export async function generateSessionPDF(sessionId: string, title: string, content: string) {
-  const res = await fetchRhelo(apiUrl(`/api/sessions/pdf`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, title, content })
-  });
-  if (!res.ok) throw new Error("Failed to compile session PDF");
-  return res.json();
-}
-
-export interface McpStatus {
-  status: "connected" | "disconnected";
-  server: string;
-  transport: "stdio";
-  api_url: string;
-  database: string;
-  tools: string[];
-  capabilities: Record<"web" | "tauri", string[]>;
-}
-
-export async function fetchMcpStatus(): Promise<McpStatus> {
-  const res = await fetchRhelo(apiUrl("/api/mcp/status"));
-  if (!res.ok) throw new Error("Failed to connect to the Rhelo MCP service");
-  return res.json();
-}
-
-export async function fetchMcpConfig(): Promise<Record<string, unknown>> {
-  const res = await fetchRhelo(apiUrl("/api/mcp/config"));
-  if (!res.ok) throw new Error("Failed to load MCP configuration");
-  const data = await res.json();
-  return data.configuration;
+export async function generateSessionPDF(title: string, content: string): Promise<Uint8Array> {
+  const bytes = await invokeDesktop<number[]>("generate_session_pdf", { title, content });
+  return new Uint8Array(bytes);
 }

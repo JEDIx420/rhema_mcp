@@ -7,18 +7,7 @@
   ],
   "permissions": [
     "core:default",
-    "shell:default",
     "dialog:allow-save",
-    "fs:allow-write-file",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "name": "binaries/server",
-          "sidecar": true,
-          "args": true
-        }
-      ]
-    }
+    "fs:allow-write-file"
   ]
 }
