@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Component, useState, useEffect, useRef, type ErrorInfo, type ReactNode } from "react";
 import Sidebar from "@/components/Sidebar";
 import CommandCenter from "@/components/CommandCenter";
 import AppViewRouter from "@/components/AppViewRouter";
@@ -52,6 +52,35 @@ const addDateHeaderIfNeeded = (currentContent: string) => {
   }
   return currentContent;
 };
+
+class DiagnosticErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[Rhelo diagnostic] Main panel render failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="m-6 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-950">
+          <h2 className="text-lg font-bold">DIAGNOSTIC TRAP: Main panel crashed.</h2>
+          <pre className="mt-4 whitespace-pre-wrap break-words text-xs leading-5">
+            {this.state.error.stack || this.state.error.message}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function Home() {
   const [activeView, setActiveView] = useState("read");
@@ -353,19 +382,21 @@ export default function Home() {
             transition={{ duration: 0.2 }}
             className="h-full"
           >
-            <AppViewRouter
-              activeView={activeView}
-              book={book}
-              chapter={chapter}
-              selectedVerseId={selectedVerseId}
-              selectedPersonId={selectedPersonId}
-              setBook={setBook}
-              setChapter={setChapter}
-              setSelectedVerseId={setSelectedVerseId}
-              setSelectedPersonId={setSelectedPersonId}
-              setActiveView={setActiveView}
-              onNavigate={handleNavigate}
-            />
+            <DiagnosticErrorBoundary key={activeView}>
+              <AppViewRouter
+                activeView={activeView}
+                book={book}
+                chapter={chapter}
+                selectedVerseId={selectedVerseId}
+                selectedPersonId={selectedPersonId}
+                setBook={setBook}
+                setChapter={setChapter}
+                setSelectedVerseId={setSelectedVerseId}
+                setSelectedPersonId={setSelectedPersonId}
+                setActiveView={setActiveView}
+                onNavigate={handleNavigate}
+              />
+            </DiagnosticErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </main>

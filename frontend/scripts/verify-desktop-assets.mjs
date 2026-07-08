@@ -49,7 +49,7 @@ try {
   const apiClient = readFileSync(resolve("src", "lib", "api.ts"), "utf8");
   if (rustHost.includes("spawn_sidecar") || rustHost.includes("tauri_plugin_shell")) failures.push("Rust still contains sidecar lifecycle code");
   if (apiClient.includes("127.0.0.1:5050") || apiClient.includes("fetchRhelo")) failures.push("The frontend still contains Python HTTP fallback logic");
-  if (!apiClient.includes('invokeDesktop<number[]>("generate_session_pdf"')) failures.push("PDF export must use native Tauri IPC");
+  if (!apiClient.includes('invokeDesktop<SessionPDFExportResult>("export_and_save_session_pdf"')) failures.push("PDF export must use the unified native save IPC command");
 } catch (error) {
   failures.push(`Native architecture validation failed: ${error}`);
 }

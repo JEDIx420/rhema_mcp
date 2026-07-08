@@ -28,7 +28,6 @@ tauri-plugin-log = "2"
 whisper-rs = "0.14.0"
 tts = "0.26.3"
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
 printpdf = { version = "0.9.1", default-features = false }
 regex = "1.12.4"
 unicode-normalization = "0.1.25"

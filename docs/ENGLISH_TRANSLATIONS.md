@@ -38,7 +38,7 @@ This means callers always receive a complete canonical chapter and complete edit
 
 ## API behavior
 
-Accepted codes are centralized in both `rhelo_backend/translations.py` and `frontend/src/lib/englishTranslations.ts`. Unknown or absent values normalize to `en_bsb`.
+Accepted codes are centralized in `frontend/src/lib/englishTranslations.ts` and normalized again in the Rust command layer. Unknown or absent values normalize to `en_bsb`.
 
 Edition-aware HTTP endpoints include chapter reading, search, verse details/cross-references, lexicon occurrences, chapter map decoration, and route-point decoration. MCP's `search_scriptures` and `get_verse_details` accept the same optional code.
 

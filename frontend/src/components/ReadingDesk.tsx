@@ -640,6 +640,20 @@ export default function ReadingDesk(props: ReadingDeskProps) {
   const definitionCache = useRef<Record<string, any>>({});
   const loadChapterRef = useRef<AbortController | null>(null);
 
+  const handleVerseClick = async (verseId: string) => {
+    setLoadingDetail(true);
+    if (props.setSelectedVerseId) props.setSelectedVerseId(verseId);
+    try {
+      const data = await fetchVerseDetails(verseId);
+      setSelectedVerse(data);
+      setStudyInitialTab("verse");
+    } catch (error) {
+      console.error("[ReadingDesk] Verse detail IPC failed", error);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   useEffect(() => {
     loadChapterRef.current?.abort();
     const controller = new AbortController();
@@ -655,24 +669,26 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       }
     });
 
-    fetchChapter(book, chapter)
-      .then((data) => {
+    const loadChapter = async () => {
+      try {
+        const data = await fetchChapter(book, chapter);
         if (!cancelled) {
           setFetchState({ status: "success", verses: data.verses || [] });
-          // If a specific verse needs to be highlighted/selected
           if (props.selectedVerseId) {
-            handleVerseClick(props.selectedVerseId);
+            await handleVerseClick(props.selectedVerseId);
           }
         }
-      })
-      .catch(() => {
+      } catch (error) {
+        console.error(`[ReadingDesk] Chapter IPC failed for ${book} ${chapter}`, error);
         if (!cancelled) {
           setFetchState({
             status: "error",
             message: `Rhelo could not finish preparing ${getBookName(book)} ${chapter}. Please retry.`,
           });
         }
-      });
+      }
+    };
+    void loadChapter();
 
     return () => {
       cancelled = true;
@@ -688,20 +704,6 @@ export default function ReadingDesk(props: ReadingDeskProps) {
 
   const loading = fetchState.status === "loading";
   const error = fetchState.status === "error" ? fetchState.message : null;
-
-  const handleVerseClick = async (verseId: string) => {
-    setLoadingDetail(true);
-    if (props.setSelectedVerseId) props.setSelectedVerseId(verseId);
-    try {
-      const data = await fetchVerseDetails(verseId);
-      setSelectedVerse(data);
-      setStudyInitialTab("verse");
-    } catch {
-      // ignore
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
 
   const navigateChapter = (direction: number) => {
     const bookIdx = BIBLE_BOOKS.findIndex((b) => b.code === book);

@@ -16,7 +16,6 @@ import {
   Check, 
   Loader2,
   Calendar,
-  AlertCircle,
   Undo2,
   Redo2,
   Bold,
@@ -37,10 +36,9 @@ import {
   updateSession, 
   deleteSession, 
   searchSessions, 
-  generateSessionPDF 
+  exportAndSaveSessionPDF,
 } from "@/lib/api";
 import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
-import PdfViewer from "./PdfViewer";
 
 interface Session {
   session_id: string;
@@ -84,18 +82,12 @@ export default function SessionsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportUrl, setExportUrl] = useState<string | null>(null);
-  const [pdfViewer, setPdfViewer] = useState<{ url: string; filename: string } | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (exportUrl) URL.revokeObjectURL(exportUrl);
-    };
-  }, [exportUrl]);
+  const [showSuccessFlash, setShowSuccessFlash] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const titleInputRef = useRef(titleInput);
   const selectedSessionRef = useRef<Session | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const successFlashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize TipTap
   const editor = useEditor({
@@ -177,6 +169,17 @@ export default function SessionsView() {
   useEffect(() => {
     selectedSessionRef.current = selectedSession;
   }, [selectedSession]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      if (successFlashTimeoutRef.current) {
+        clearTimeout(successFlashTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Dispatch selection changes globally
   useEffect(() => {
@@ -322,16 +325,18 @@ export default function SessionsView() {
     setExporting(true);
     try {
       const htmlContent = editor.getHTML();
-      const bytes = await generateSessionPDF(titleInput, htmlContent);
-      const pdfBuffer = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      ) as ArrayBuffer;
-      const objectUrl = URL.createObjectURL(new Blob([pdfBuffer], { type: "application/pdf" }));
-      setExportUrl(objectUrl);
-      setPdfViewer({ url: objectUrl, filename: `${titleInput || "session"}.pdf` });
+      const result = await exportAndSaveSessionPDF(titleInput, htmlContent);
+      if (result.saved) {
+        setShowSuccessFlash(true);
+        if (successFlashTimeoutRef.current) {
+          clearTimeout(successFlashTimeoutRef.current);
+        }
+        successFlashTimeoutRef.current = setTimeout(() => {
+          setShowSuccessFlash(false);
+        }, 1000);
+      }
     } catch (err) {
-      console.error(err);
+      void err;
     } finally {
       setExporting(false);
     }
@@ -450,6 +455,14 @@ export default function SessionsView() {
 
       {/* Right Pane Editor Canvas */}
       <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        {showSuccessFlash ? (
+          <div className="fixed right-6 top-6 z-50 pointer-events-none">
+            <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 shadow-lg shadow-emerald-950/10 backdrop-blur-sm">
+              <Check size={16} className="text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-900">PDF saved</span>
+            </div>
+          </div>
+        ) : null}
         {selectedSession ? (
           <>
             {/* Editor Action Header */}
@@ -742,21 +755,6 @@ export default function SessionsView() {
               <EditorContent editor={editor} className="h-full" />
             </div>
 
-            {exportUrl && (
-              <div className="px-6 py-2 border-t border-slate-100 bg-blue-50/50 flex items-center justify-between text-xs text-blue-700 font-sans">
-                <div className="flex items-center gap-1.5">
-                  <AlertCircle size={13} />
-                  <span>PDF Document Compiled Successfully! If download didn&apos;t trigger, click right button to open.</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPdfViewer({ url: exportUrl, filename: `${titleInput || "session"}.pdf` })}
-                  className="font-bold underline hover:text-blue-900"
-                >
-                  Open PDF
-                </button>
-              </div>
-            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-sans gap-3">
@@ -766,13 +764,6 @@ export default function SessionsView() {
           </div>
         )}
       </div>
-      {pdfViewer && (
-        <PdfViewer
-          url={pdfViewer.url}
-          filename={pdfViewer.filename}
-          onClose={() => setPdfViewer(null)}
-        />
-      )}
     </div>
   );
 }

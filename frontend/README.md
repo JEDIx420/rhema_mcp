@@ -29,8 +29,8 @@ No Python process or localhost API is required.
 - `src/lib/api.ts` is the typed Tauri IPC client.
 - `src-tauri/src/lib.rs` owns database setup, session CRUD, scripture reads, TTS, and Whisper STT.
 - `src-tauri/src/research.rs` owns search, lexicon, maps, research metadata, statistics, and PDF generation.
-- `src/components/SessionsView.tsx` previews the PDF bytes returned by Rust.
-- `src/components/PdfViewer.tsx` uses the native save dialog and filesystem plugin.
+- `src/components/SessionsView.tsx` invokes the native PDF save flow and reports its result.
+- Session PDF export uses a single native Rust command to choose the destination and write the file.
 
 Tauri bundles `rhelo.db`, `ggml-base.bin`, and the Noto font family. On first launch the seed database is copied to the platform app-data directory. PDF generation embeds the bundled Noto fonts so English, Greek, Hebrew, Devanagari, Telugu, Malayalam, and Tamil remain offline and portable.
 

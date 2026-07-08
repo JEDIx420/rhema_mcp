@@ -11,7 +11,6 @@ import {
   BookMarked,
   Settings,
   Notebook,
-  Plug,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -22,7 +21,6 @@ const NAV_ITEMS = [
   { id: "people", label: "People", icon: Users },
   { id: "dictionary", label: "Dictionary", icon: BookMarked },
   { id: "sessions", label: "Sessions", icon: Notebook },
-  { id: "mcp", label: "MCP", icon: Plug },
 ];
 
 export default function Sidebar({

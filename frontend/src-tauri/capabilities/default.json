@@ -5,9 +5,13 @@
   "windows": [
     "main"
   ],
+  "remote": {
+    "urls": [
+      "http://*:3000/*"
+    ]
+  },
   "permissions": [
     "core:default",
-    "dialog:allow-save",
-    "fs:allow-write-file"
+    "dialog:allow-save"
   ]
 }

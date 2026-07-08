@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tauri::Manager;
+use tauri_plugin_dialog::DialogExt;
 use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 
 const OLD_TESTAMENT: &[&str] = &[
@@ -1617,14 +1618,38 @@ fn render_session_pdf(
     Ok(document.save(&printpdf::PdfSaveOptions::default(), &mut Vec::new()))
 }
 
-/// Generates a self-contained PDF in memory so the frontend can preview it and
-/// let the native Tauri save dialog choose the final destination.
+#[derive(Serialize)]
+pub(crate) struct SessionPdfExportResult {
+    saved: bool,
+    path: Option<String>,
+}
+
+fn session_pdf_filename(title: &str) -> String {
+    let stem: String = title
+        .trim()
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            _ => character,
+        })
+        .collect();
+    let stem = stem.trim().trim_end_matches('.');
+    format!(
+        "{}.pdf",
+        if stem.is_empty() {
+            "Study Session"
+        } else {
+            stem
+        }
+    )
+}
+
 #[tauri::command]
-pub(crate) fn generate_session_pdf(
+pub(crate) async fn export_and_save_session_pdf(
     title: String,
     content: String,
     app: tauri::AppHandle,
-) -> Result<Vec<u8>, String> {
+) -> Result<SessionPdfExportResult, String> {
     let title = title.trim();
     let safe_title = if title.is_empty() {
         "Study Session"
@@ -1644,7 +1669,31 @@ pub(crate) fn generate_session_pdf(
         fonts.insert(*kind, bytes);
     }
 
-    render_session_pdf(safe_title, &content, fonts)
+    let pdf_bytes = render_session_pdf(safe_title, &content, fonts)?;
+    let destination = app
+        .dialog()
+        .file()
+        .set_title("Save session PDF")
+        .set_file_name(session_pdf_filename(safe_title))
+        .add_filter("PDF document", &["pdf"])
+        .blocking_save_file();
+
+    let Some(destination) = destination else {
+        return Ok(SessionPdfExportResult {
+            saved: false,
+            path: None,
+        });
+    };
+    let destination = destination
+        .into_path()
+        .map_err(|error| format!("The selected PDF destination is invalid: {error}"))?;
+    std::fs::write(&destination, pdf_bytes)
+        .map_err(|error| format!("Failed to save PDF at {:?}: {error}", destination))?;
+
+    Ok(SessionPdfExportResult {
+        saved: true,
+        path: Some(destination.to_string_lossy().into_owned()),
+    })
 }
 
 #[cfg(test)]

@@ -100,7 +100,7 @@ The global microphone records in Tauri through Whisper or falls back to browser 
 
 ## MCP and settings
 
-The MCP page tests the configurable HTTP companion endpoint, shows the eight MCP tool names, and generates/copies client JSON. Browser mode cannot control local processes; Tauri launches its bundled HTTP sidecar.
+The MCP page documents the native architecture and reserves a home for a future Rust-native MCP transport. Rhelo does not launch an HTTP companion or Python sidecar.
 
 Settings displays database-backed content counts, data/source attribution, and the active Rhelo color system. It is informational; English edition selection lives in the shared scripture modal.
 

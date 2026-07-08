@@ -313,7 +313,14 @@ export async function searchSessions(query: string): Promise<{ sessions: Session
   return invokeDesktop<{ sessions: SessionRecord[] }>("search_sessions", { query });
 }
 
-export async function generateSessionPDF(title: string, content: string): Promise<Uint8Array> {
-  const bytes = await invokeDesktop<number[]>("generate_session_pdf", { title, content });
-  return new Uint8Array(bytes);
+export interface SessionPDFExportResult {
+  saved: boolean;
+  path: string | null;
+}
+
+export async function exportAndSaveSessionPDF(
+  title: string,
+  content: string,
+): Promise<SessionPDFExportResult> {
+  return invokeDesktop<SessionPDFExportResult>("export_and_save_session_pdf", { title, content });
 }

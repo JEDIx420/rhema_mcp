@@ -377,47 +377,96 @@ fn speak_text(
     tts_state: tauri::State<'_, Mutex<Tts>>,
 ) -> Result<(), String> {
     let mut tts = tts_state.lock().map_err(|_| "Failed to lock TTS state")?;
-    let target_lang = lang.to_lowercase().replace('_', "-");
-    let base_lang = target_lang.split('-').next().unwrap_or("");
-    if !matches!(base_lang, "en" | "he" | "el") {
-        return Err("Rhelo TTS supports English, Hebrew, and Greek only.".to_string());
-    }
+    let target_locale = canonical_tts_locale(&lang)?;
+    let voices = tts
+        .voices()
+        .map_err(|error| format!("Failed to query installed TTS voices: {error}"))?;
+    let voice_languages: Vec<String> = voices
+        .iter()
+        .map(|voice| voice.language().to_string())
+        .collect();
+    let voice_index = select_voice_index(&voice_languages, target_locale).ok_or_else(|| {
+        let mut available = voice_languages.clone();
+        available.sort();
+        available.dedup();
+        format!(
+            "No voice found for language '{}'. Available languages: {}.",
+            target_locale,
+            available.join(", ")
+        )
+    })?;
 
-    let mut voice_found = false;
-    if let Ok(voices) = tts.voices() {
-        if base_lang == "en" {
-            voice_found = true;
-        } else if let Some(voice) = voices.into_iter().find(|v| {
-            let v_lang = v.language().to_lowercase().replace('_', "-");
-            v_lang == target_lang
-                || v_lang.starts_with(&target_lang)
-                || target_lang.starts_with(&v_lang)
-        }) {
-            let _ = tts.set_voice(&voice);
-            voice_found = true;
-        }
-
-        if !voice_found {
-            let mut available = Vec::new();
-            if let Ok(all_voices) = tts.voices() {
-                for av in all_voices {
-                    let av_lang = av.language().to_string();
-                    if !available.contains(&av_lang) {
-                        available.push(av_lang);
-                    }
-                }
-            }
-            return Err(format!(
-                "No voice found for language '{}'. Available languages: {}.",
-                target_lang,
-                available.join(", ")
-            ));
-        }
-    }
+    tts.set_voice(&voices[voice_index]).map_err(|error| {
+        format!(
+            "Failed to select the '{}' voice for '{}': {error}",
+            voices[voice_index].name(),
+            target_locale
+        )
+    })?;
 
     tts.speak(text, true)
         .map_err(|e| format!("Speech synthesis failed: {}", e))?;
     Ok(())
+}
+
+fn normalize_language_tag(language: &str) -> String {
+    language.trim().to_lowercase().replace('_', "-")
+}
+
+fn canonical_tts_locale(language: &str) -> Result<&'static str, String> {
+    match normalize_language_tag(language)
+        .split('-')
+        .next()
+        .unwrap_or("")
+    {
+        "en" => Ok("en-us"),
+        "he" => Ok("he-il"),
+        "el" => Ok("el-gr"),
+        _ => Err("Rhelo TTS supports English, Hebrew, and Greek only.".to_string()),
+    }
+}
+
+fn select_voice_index(voice_languages: &[String], target_locale: &str) -> Option<usize> {
+    let normalized_target = normalize_language_tag(target_locale);
+    let target_base = normalized_target.split('-').next()?;
+
+    voice_languages
+        .iter()
+        .position(|language| normalize_language_tag(language) == normalized_target)
+        .or_else(|| {
+            voice_languages.iter().position(|language| {
+                normalize_language_tag(language)
+                    .split('-')
+                    .next()
+                    .is_some_and(|base| base == target_base)
+            })
+        })
+}
+
+#[cfg(test)]
+mod tts_voice_tests {
+    use super::{canonical_tts_locale, select_voice_index};
+
+    #[test]
+    fn maps_supported_languages_to_canonical_locales() {
+        assert_eq!(canonical_tts_locale("en"), Ok("en-us"));
+        assert_eq!(canonical_tts_locale("HE_il"), Ok("he-il"));
+        assert_eq!(canonical_tts_locale("el-GR"), Ok("el-gr"));
+        assert!(canonical_tts_locale("fr-FR").is_err());
+    }
+
+    #[test]
+    fn prefers_an_exact_locale_match() {
+        let languages = vec!["en-GB".to_string(), "en-US".to_string()];
+        assert_eq!(select_voice_index(&languages, "en-US"), Some(1));
+    }
+
+    #[test]
+    fn explicitly_selects_a_same_language_voice_when_region_is_unavailable() {
+        let languages = vec!["he".to_string(), "en-GB".to_string()];
+        assert_eq!(select_voice_index(&languages, "en-US"), Some(1));
+        assert_eq!(select_voice_index(&languages, "el-GR"), None);
+    }
 }
 
 #[tauri::command]
@@ -478,7 +527,6 @@ async fn transcribe_audio(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 if let Err(err) = app.handle().plugin(
@@ -581,7 +629,7 @@ pub fn run() {
             research::fetch_route_points,
             research::fetch_stats,
             research::search_sessions,
-            research::generate_session_pdf,
+            research::export_and_save_session_pdf,
             fetch_sessions,
             create_session,
             update_session,

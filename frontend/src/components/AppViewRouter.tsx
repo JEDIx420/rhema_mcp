@@ -1,7 +1,6 @@
 import DictionaryView from "@/components/DictionaryView";
 import GenealogyView from "@/components/GenealogyView";
 import MapView from "@/components/MapView";
-import McpView from "@/components/McpView";
 import ReadingDesk from "@/components/ReadingDesk";
 import SearchView from "@/components/SearchView";
 import SessionsView from "@/components/SessionsView";
@@ -36,8 +35,6 @@ export default function AppViewRouter(props: AppViewRouterProps) {
       return <GenealogyView selectedPersonId={props.selectedPersonId} onSelectPerson={props.setSelectedPersonId} onNavigate={props.onNavigate} onViewChange={props.setActiveView} />;
     case "sessions":
       return <SessionsView />;
-    case "mcp":
-      return <McpView />;
     case "settings":
       return <SettingsView />;
     case "read":
