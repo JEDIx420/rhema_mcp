@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          lfs: true # Forces the runner to download the actual 443MB asset files (rhelo.db and ggml-base.bin)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
