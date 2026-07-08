@@ -30,7 +30,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Install LLVM (For whisper-rs AI bindings)
-        uses: KyleMayes/install-llvm-action@v3
+        uses: KyleMayes/install-llvm-action@v0
         with:
           version: "16.0"
           directory: ${{ runner.temp }}/llvm
