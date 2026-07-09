@@ -67,6 +67,8 @@ def main():
     
     # Drop existing tables to ensure clean initialization
     drop_existing_object(cursor, "verses")
+    drop_existing_object(cursor, "verses_base")
+    drop_existing_object(cursor, "verse_translations")
     drop_existing_object(cursor, "search_en")
 
     cursor.executescript("""
