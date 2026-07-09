@@ -6,7 +6,8 @@ import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, crea
 import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 import { getBookName } from "@/lib/books";
 import { setGlassDragImage } from "@/lib/drag";
-import { invokeSpeech } from "@/lib/speech";
+import { ensureGreekVoice, invokeSpeech } from "@/lib/speech";
+import { TtsWarning } from "@/components/TtsWarning";
 
 const addDateHeaderIfNeeded = (currentContent: string) => {
   const today = new Date();
@@ -458,6 +459,9 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
   };
 
   const speakWord = async (word: string, isGreek: boolean) => {
+    if (isGreek && !ensureGreekVoice()) {
+      return;
+    }
     await invokeSpeech("stop_speech", {}).catch(() => { });
     await invokeSpeech("speak_text", { text: word, lang: isGreek ? "el" : "he" });
   };
@@ -505,6 +509,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
+      <TtsWarning />
       {/* Header Tabs */}
       <div className="flex border-b border-slate-200 text-sm font-semibold bg-slate-50 shrink-0">
         <button

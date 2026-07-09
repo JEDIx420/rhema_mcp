@@ -15,6 +15,11 @@ const SUPPORTED_TTS_LANGUAGES = new Set(["en", "el", "he"]);
 const normalizeLanguage = (language: string) =>
   language.toLowerCase().replace("_", "-").split("-")[0];
 
+export const ensureGreekVoice = (): boolean => {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.some((voice) => voice.lang.toLowerCase().includes("el"));
+};
+
 export async function invokeSpeech(command: SpeechCommand, args: SpeechArguments): Promise<void> {
   if ((window as TauriWindow).__TAURI_INTERNALS__ !== undefined) {
     const { invoke } = await import("@tauri-apps/api/core");
