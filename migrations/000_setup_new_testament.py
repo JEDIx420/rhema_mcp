@@ -31,6 +31,17 @@ def fetch_json(url, decode_sig=False):
         print(f"Error downloading {url}: {e}", file=sys.stderr)
         sys.exit(1)
 
+def drop_existing_object(cursor, name):
+    cursor.execute("SELECT type FROM sqlite_master WHERE name = ?", (name,))
+    row = cursor.fetchone()
+    if not row:
+        return
+    object_type = row[0]
+    if object_type == "view":
+        cursor.execute(f"DROP VIEW IF EXISTS {name}")
+    else:
+        cursor.execute(f"DROP TABLE IF EXISTS {name}")
+
 def main():
     urls = {
         "kjv": ("https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json", True),
@@ -55,10 +66,10 @@ def main():
     cursor = conn.cursor()
     
     # Drop existing tables to ensure clean initialization
+    drop_existing_object(cursor, "verses")
+    drop_existing_object(cursor, "search_en")
+
     cursor.executescript("""
-    DROP TABLE IF EXISTS verses;
-    DROP TABLE IF EXISTS search_en;
-    
     CREATE TABLE verses (
         id TEXT PRIMARY KEY,
         book TEXT,
