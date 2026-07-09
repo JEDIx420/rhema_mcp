@@ -183,3 +183,46 @@
   padding-bottom: 0.25rem !important;
   font-family: var(--font-sans), sans-serif !important;
 }
+
+@media print {
+  html, body, main {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .ProseMirror {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  p, h1, h2, h3, blockquote, .prose > div, .prose > ul, .prose > ol {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-hide-sidebar,
+  .print-hide-header,
+  .print-hide-toolbar {
+    display: none !important;
+  }
+
+  .print-hide-shell-sidebar,
+  aside {
+    display: none !important;
+  }
+
+  .print-expand-shell,
+  .print-expand-editor {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}

@@ -36,7 +36,6 @@ import {
   updateSession, 
   deleteSession, 
   searchSessions, 
-  exportAndSaveSessionPDF,
 } from "@/lib/api";
 import { readVerseDragPayload, renderVerseDropHtml } from "@/lib/verseDrop";
 
@@ -324,19 +323,17 @@ export default function SessionsView() {
     if (!selectedSession || !editor) return;
     setExporting(true);
     try {
-      const htmlContent = editor.getHTML();
-      const result = await exportAndSaveSessionPDF(titleInput, htmlContent);
-      if (result.saved) {
-        setShowSuccessFlash(true);
-        if (successFlashTimeoutRef.current) {
-          clearTimeout(successFlashTimeoutRef.current);
-        }
-        successFlashTimeoutRef.current = setTimeout(() => {
-          setShowSuccessFlash(false);
-        }, 1000);
-      }
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const originalTitle = document.title;
+      // Fallback through the active states to get the best title
+      document.title = selectedSession?.title || titleInput || 'Study_Session';
+      window.print();
+      // Restore title after the OS dialog captures it
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 500);
     } catch (err) {
-      void err;
+      console.error("PDF export failed", err);
     } finally {
       setExporting(false);
     }
@@ -365,9 +362,9 @@ export default function SessionsView() {
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-50">
+    <div className="flex h-full w-full overflow-hidden bg-slate-50 print:!block print:!h-auto print:!overflow-visible print:bg-white print-expand-shell">
       {/* Left Sidebar List Pane */}
-      <div className="w-80 border-r border-slate-200 flex flex-col shrink-0 bg-white">
+      <div className="w-80 border-r border-slate-200 flex flex-col shrink-0 bg-white print:hidden print-hide-sidebar">
         <div className="h-16 px-5 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <Notebook size={20} className="text-blue-600" />
@@ -454,7 +451,7 @@ export default function SessionsView() {
       </div>
 
       {/* Right Pane Editor Canvas */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      <div className="flex-1 flex flex-col overflow-hidden bg-white print:!block print:!h-auto print:!overflow-visible">
         {showSuccessFlash ? (
           <div className="fixed right-6 top-6 z-50 pointer-events-none">
             <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 shadow-lg shadow-emerald-950/10 backdrop-blur-sm">
@@ -466,7 +463,7 @@ export default function SessionsView() {
         {selectedSession ? (
           <>
             {/* Editor Action Header */}
-            <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/30">
+            <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/30 print:hidden print-hide-header">
               <input
                 type="text"
                 value={titleInput}
@@ -518,7 +515,7 @@ export default function SessionsView() {
             </div>
 
             {/* Formatting Toolbar */}
-            <div className="border-b border-slate-200 bg-slate-50/50 p-2 flex flex-wrap items-center gap-1 shrink-0 select-none">
+            <div className="border-b border-slate-200 bg-slate-50/50 p-2 flex flex-wrap items-center gap-1 shrink-0 select-none print:hidden print-hide-toolbar">
               {/* Undo / Redo */}
               <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
                 <button
@@ -750,9 +747,9 @@ export default function SessionsView() {
             <div 
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDropVerse}
-              className="flex-1 overflow-y-auto p-8 relative group"
+              className="flex-1 overflow-y-auto p-8 relative group print:!block print:!h-auto print:!overflow-visible print:!max-h-none print:!p-0 print-expand-editor"
             >
-              <EditorContent editor={editor} className="h-full" />
+              <EditorContent editor={editor} className="h-full print:!block print:!h-auto print:!overflow-visible" />
             </div>
 
           </>

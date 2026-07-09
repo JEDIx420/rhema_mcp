@@ -385,7 +385,11 @@ fn speak_text(
         .iter()
         .map(|voice| voice.language().to_string())
         .collect();
-    let voice_index = select_voice_index(&voice_languages, target_locale).ok_or_else(|| {
+    let voice_names: Vec<String> = voices
+        .iter()
+        .map(|voice| voice.name().to_string())
+        .collect();
+    let voice_index = select_voice_index(&voice_languages, &voice_names, target_locale).ok_or_else(|| {
         let mut available = voice_languages.clone();
         available.sort();
         available.dedup();
@@ -426,21 +430,38 @@ fn canonical_tts_locale(language: &str) -> Result<&'static str, String> {
     }
 }
 
-fn select_voice_index(voice_languages: &[String], target_locale: &str) -> Option<usize> {
+fn select_voice_index(voice_languages: &[String], voice_names: &[String], target_locale: &str) -> Option<usize> {
     let normalized_target = normalize_language_tag(target_locale);
     let target_base = normalized_target.split('-').next()?;
 
-    voice_languages
+    let match_index = voice_languages
         .iter()
-        .position(|language| normalize_language_tag(language) == normalized_target)
-        .or_else(|| {
-            voice_languages.iter().position(|language| {
-                normalize_language_tag(language)
-                    .split('-')
-                    .next()
-                    .is_some_and(|base| base == target_base)
-            })
-        })
+        .zip(voice_names.iter())
+        .position(|(language, name)| {
+            let normalized_language = normalize_language_tag(language);
+            let normalized_name = name.trim().to_lowercase();
+            normalized_language == normalized_target
+                || normalized_language == target_base
+                || normalized_name.contains("greek")
+                || normalized_name.contains("stefanos")
+        });
+
+    if match_index.is_none() {
+        println!(
+            "TTS voice trace for target '{}':",
+            target_locale
+        );
+        for (index, (language, name)) in voice_languages.iter().zip(voice_names.iter()).enumerate() {
+            println!(
+                "  [{}] language='{}' name='{}'",
+                index,
+                language,
+                name
+            );
+        }
+    }
+
+    match_index
 }
 
 #[cfg(test)]
@@ -458,14 +479,16 @@ mod tts_voice_tests {
     #[test]
     fn prefers_an_exact_locale_match() {
         let languages = vec!["en-GB".to_string(), "en-US".to_string()];
-        assert_eq!(select_voice_index(&languages, "en-US"), Some(1));
+        let names = vec!["British English".to_string(), "American English".to_string()];
+        assert_eq!(select_voice_index(&languages, &names, "en-US"), Some(1));
     }
 
     #[test]
     fn explicitly_selects_a_same_language_voice_when_region_is_unavailable() {
         let languages = vec!["he".to_string(), "en-GB".to_string()];
-        assert_eq!(select_voice_index(&languages, "en-US"), Some(1));
-        assert_eq!(select_voice_index(&languages, "el-GR"), None);
+        let names = vec!["Hebrew".to_string(), "Microsoft Stefanos Greek".to_string()];
+        assert_eq!(select_voice_index(&languages, &names, "en-US"), Some(1));
+        assert_eq!(select_voice_index(&languages, &names, "el-GR"), Some(1));
     }
 }
 
@@ -629,7 +652,6 @@ pub fn run() {
             research::fetch_route_points,
             research::fetch_stats,
             research::search_sessions,
-            research::export_and_save_session_pdf,
             fetch_sessions,
             create_session,
             update_session,

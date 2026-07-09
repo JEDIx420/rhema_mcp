@@ -360,7 +360,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 relative">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 relative print:!block print:!h-auto print:!min-h-0 print:!overflow-visible">
       {/* CommandCenter Keyboard-Activated Command Launcher */}
       <CommandCenter
         onNavigate={handleNavigate}
@@ -372,7 +372,7 @@ export default function Home() {
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
       
       {/* Main Panel Viewport */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden print:!block print:!h-auto print:!min-h-0 print:!overflow-visible">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeView}

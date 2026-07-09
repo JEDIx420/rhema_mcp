@@ -12,6 +12,7 @@
   },
   "permissions": [
     "core:default",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "core:webview:allow-print"
   ]
 }

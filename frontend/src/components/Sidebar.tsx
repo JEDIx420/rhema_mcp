@@ -38,7 +38,7 @@ export default function Sidebar({
       onMouseLeave={() => setHovered(false)}
       animate={{ width: hovered ? 240 : 72 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative h-full flex flex-col items-center border-r border-slate-200 bg-white shrink-0 z-20"
+      className="relative h-full flex flex-col items-center border-r border-slate-200 bg-white shrink-0 z-20 print-hide-shell-sidebar"
     >
       {/* Brand Header - Height strictly matched to top navbar (64px / h-16) */}
       <div className="h-16 w-full px-4.5 border-b border-slate-200 flex items-center shrink-0">

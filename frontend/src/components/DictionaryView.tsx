@@ -6,6 +6,7 @@ import { Search, Loader2, BookMarked, BookOpen, Volume2 } from "lucide-react";
 import { searchLexicon, searchTopics } from "@/lib/api";
 import { setGlassDragImage } from "@/lib/drag";
 import { invokeSpeech } from "@/lib/speech";
+import StudyPane from "./StudyPane";
 
 export default function DictionaryView() {
   const [query, setQuery] = useState("");
@@ -15,6 +16,7 @@ export default function DictionaryView() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const speakTimerRef = useRef<any>(null);
 
   useEffect(() => {
@@ -86,63 +88,83 @@ export default function DictionaryView() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
-      {/* Header */}
-      <div className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900 font-sans">
-          Dictionary & Lexicon
-        </h2>
-      </div>
+  const handleSuggestionClick = (suggestion: string) => {
+    setQuery(suggestion);
+    setSearched(false);
+    setSelectedEntityId(null);
+  };
 
-      {/* Dictionary Query Area */}
-      <div className="p-8 border-b border-slate-200 shrink-0 bg-slate-50 flex justify-center">
-        <form onSubmit={handleSearch} className="w-full max-w-2xl">
-          <div className="relative flex items-center bg-white rounded-xl shadow-sm border border-slate-300 transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-            <Search
-              size={22}
-              className="absolute left-5 pointer-events-none text-slate-400"
-            />
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+      {/* Left Column: Search & Results */}
+      <div className="col-span-1 md:col-span-5 border-r border-slate-200 bg-slate-55 flex flex-col h-full overflow-hidden">
+        {/* Header */}
+        <div className="h-16 px-6 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900 font-sans">
+            Dictionary & Lexicon
+          </h2>
+        </div>
+
+        {/* Dictionary Query Area */}
+        <div className="p-6 border-b border-slate-200 bg-white shrink-0">
+          <form onSubmit={handleSearch} className="relative w-full">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={"Search Strong's, Easton's, Smith's, Nave's (e.g., \"grace\", \"baptism\")..."}
-              className="w-full pl-14 pr-32 py-4 bg-transparent border-none outline-none text-lg text-slate-900 placeholder-slate-400 rounded-xl font-sans"
+              className="w-full h-14 bg-white rounded-xl border border-slate-300 shadow-sm pl-4 pr-24 text-lg outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-sans"
             />
             <button
               type="submit"
-              className="absolute right-3 px-6 py-2.5 rounded-xl text-base font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs cursor-pointer font-sans"
+              className="absolute right-1.5 top-1.5 bottom-1.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center cursor-pointer font-sans text-sm"
             >
               Search
             </button>
-          </div>
-        </form>
-      </div>
+          </form>
 
-      {/* Results Viewport */}
-      <div className="flex-1 overflow-y-auto p-8 relative">
-        <div className="absolute top-1/3 left-1/3 w-80 h-80 rounded-full bg-purple-500/5 blur-[120px] pointer-events-none" />
+          {!loading && !searched && (
+            <div className="pt-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 py-1 font-sans text-center">
+                Suggested Searches
+              </h4>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {["Agape", "Baptism", "Grace", "Zion"].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => handleSuggestionClick(suggestion)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all font-sans text-sm font-medium"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-555 text-sm">
-            <Loader2 size={32} className="animate-spin text-purple-600" />
-            <span>Scanning lexicon and dictionary databases...</span>
-          </div>
-        )}
+        {/* Results Viewport */}
+        <div className="flex-1 overflow-y-auto p-8 relative">
+          <div className="absolute top-1/3 left-1/3 w-80 h-80 rounded-full bg-purple-500/5 blur-[120px] pointer-events-none" />
 
-        {!loading && !searched && (
-          <div className="text-center py-24 text-slate-400">
-            <BookMarked size={56} className="mx-auto mb-4 opacity-20" />
-            <h3 className="text-lg font-bold text-slate-500 mb-1.5 font-sans">Lexical Reference Center</h3>
-            <p className="text-sm max-w-sm mx-auto leading-relaxed">
-              Perform multi-index searches across Strong&apos;s Greek/Hebrew Lexicon, Easton&apos;s Bible Dictionary, Smith&apos;s Bible Dictionary, and Nave&apos;s Topical Index.
-            </p>
-          </div>
-        )}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-555 text-sm">
+              <Loader2 size={32} className="animate-spin text-purple-600" />
+              <span>Scanning lexicon and dictionary databases...</span>
+            </div>
+          )}
 
-        {!loading && searched && (
-          <div className="max-w-4xl mx-auto space-y-8 z-10 relative">
+          {!loading && !searched && (
+            <div className="text-center py-24 text-slate-400">
+              <BookMarked size={56} className="mx-auto mb-4 opacity-20" />
+              <h3 className="text-lg font-bold text-slate-500 mb-1.5 font-sans">Lexical Reference Center</h3>
+              <p className="text-sm max-w-sm mx-auto leading-relaxed">
+                Perform multi-index searches across Strong&apos;s Greek/Hebrew Lexicon, Easton&apos;s Bible Dictionary, Smith&apos;s Bible Dictionary, and Nave&apos;s Topical Index.
+              </p>
+            </div>
+          )}
+
+          {!loading && searched && (
+            <div className="max-w-4xl mx-auto space-y-8 z-10 relative">
 
             {/* Strong's Lexicon */}
             {lexiconResults.length > 0 && (
@@ -251,6 +273,30 @@ export default function DictionaryView() {
                 <p className="text-base">No dictionary or lexicon results found for &quot;{query}&quot;.</p>
               </div>
             )}
+            {lexiconResults.length === 0 && dictionaryResults.length === 0 && topicResults.length === 0 && (
+              <div className="text-center py-20 text-slate-500 font-sans">
+                <p className="text-base">No dictionary or lexicon results found for &quot;{query}&quot;.</p>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
+      </div>
+
+      {/* Right Column: Dynamic Study Pane */}
+      <div className="col-span-1 md:col-span-7 bg-white flex flex-col h-full overflow-hidden">
+        {selectedEntityId ? (
+          <StudyPane
+            verseId={selectedEntityId}
+            onVerseClick={(id) => setSelectedEntityId(id)}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 font-sans h-full">
+            <BookOpen size={48} className="text-slate-300 mb-4 stroke-[1.5]" />
+            <h3 className="text-lg font-bold text-slate-700 mb-1">Lexical Reference Center</h3>
+            <p className="text-sm text-slate-400 max-w-xs leading-relaxed">
+              Select a lexicon entry to view detailed exegesis, commentaries, cross-references, and word-level original language lexicons.
+            </p>
           </div>
         )}
       </div>

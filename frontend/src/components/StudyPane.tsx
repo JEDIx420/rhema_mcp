@@ -6,6 +6,7 @@ import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, crea
 import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 import { getBookName } from "@/lib/books";
 import { setGlassDragImage } from "@/lib/drag";
+import { invokeSpeech } from "@/lib/speech";
 
 const addDateHeaderIfNeeded = (currentContent: string) => {
   const today = new Date();
@@ -456,13 +457,9 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
     loadLexicon(word);
   };
 
-  const speakWord = (word: string, isGreek: boolean) => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = isGreek ? "el-GR" : "he-IL";
-      window.speechSynthesis.speak(utterance);
-    }
+  const speakWord = async (word: string, isGreek: boolean) => {
+    await invokeSpeech("stop_speech", {}).catch(() => { });
+    await invokeSpeech("speak_text", { text: word, lang: isGreek ? "el" : "he" });
   };
 
   const handlePlayAudio = (lemma: string) => {
