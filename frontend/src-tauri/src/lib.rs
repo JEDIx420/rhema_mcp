@@ -1461,6 +1461,7 @@ pub fn run() {
             research::search_scripture,
             research::lookup_lexicon,
             research::fetch_research_meta,
+            research::fetch_dictionary_study,
             research::fetch_verse_details,
             research::fetch_chapter_map,
             research::fetch_geography_routes,

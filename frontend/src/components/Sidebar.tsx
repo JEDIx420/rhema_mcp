@@ -45,7 +45,11 @@ export default function Sidebar({
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 border border-slate-200/60 shadow-xs"
         >
-          <img src="/rhelologo.png" alt="rhelo" className="w-7 h-7 object-contain" />
+          <img
+            src="/rhelo-logo.png"
+            alt="Rhelo"
+            className="h-10 w-10 object-contain"
+          />
         </div>
         <AnimatePresence>
           {hovered && (

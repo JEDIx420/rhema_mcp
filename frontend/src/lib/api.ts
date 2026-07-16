@@ -97,14 +97,17 @@ export async function fetchVerseDetails(verseId: string): Promise<VerseDetailsRe
   });
 }
 
-export interface LexiconEntry extends Record<string, string> {
+export interface LexiconEntry {
   strongs_id: string;
   lemma: string;
   definition: string;
 }
 
-export interface DictionaryEntry extends Record<string, string> {
+export interface DictionaryEntry {
+  id: number;
+  slug: string;
   name: string;
+  source: string;
   definition_text: string;
 }
 
@@ -131,19 +134,48 @@ export async function searchLexicon(query: string): Promise<Pick<NativeLexiconRe
   });
 }
 
-export interface TopicEntry extends Record<string, string> {
+export interface TopicEntry {
+  id: number;
   subject: string;
   entry: string;
 }
 
+export interface BibleNameEntry {
+  name: string;
+  meaning: string;
+}
+
 export interface TopicsResponse {
   topics: TopicEntry[];
+  names: BibleNameEntry[];
 }
 
 export async function searchTopics(query: string): Promise<TopicsResponse> {
   return invokeDesktop<TopicsResponse>("fetch_research_meta", {
     category: "topics",
     value: query,
+  });
+}
+
+export type DictionaryStudyKind = "strongs" | "dictionary" | "topic" | "name";
+
+export interface DictionaryStudyResponse {
+  kind: DictionaryStudyKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  definition: string;
+  related_verses: LexiconOccurrence[];
+}
+
+export async function fetchDictionaryStudy(
+  kind: DictionaryStudyKind,
+  entryId: string
+): Promise<DictionaryStudyResponse> {
+  return invokeDesktop<DictionaryStudyResponse>("fetch_dictionary_study", {
+    kind,
+    entryId,
+    translationCode: getStoredEnglishTranslation(),
   });
 }
 

@@ -174,11 +174,14 @@ struct LexiconEntry {
 
 #[derive(Serialize)]
 struct DictionaryEntry {
+    id: i64,
+    slug: String,
     name: String,
+    source: String,
     definition_text: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct LexiconOccurrence {
     id: String,
     book: String,
@@ -201,14 +204,18 @@ fn query_occurrences(
     word: &str,
     translation_code: &str,
 ) -> Result<Vec<LexiconOccurrence>, String> {
-    let select = "SELECT v.id, v.book, v.chapter, v.verse,
-                         COALESCE(et.text, v.text_en), v.text_original
-                  FROM verses v
-                  LEFT JOIN verse_translations et
-                    ON et.verse_id = v.id AND et.translation_code = ?1";
-    let morphology_pattern = format!("%\"lemma\": \"{word}\"%");
+    let normalized_lemma = word.nfc().collect::<String>();
     let mut morphology_statement = connection
-        .prepare(&format!("{select} WHERE v.morphology LIKE ?2 LIMIT 20"))
+        .prepare(
+            "SELECT DISTINCT v.id, v.book, v.chapter, v.verse,
+                    COALESCE(et.text, v.text_en), v.text_original
+             FROM verses v
+             LEFT JOIN verse_translations et
+               ON et.verse_id = v.id AND et.translation_code = ?1
+             JOIN json_each(v.morphology) morphology_word
+             WHERE json_extract(morphology_word.value, '$.lemma') = ?2
+             LIMIT 20",
+        )
         .map_err(|error| format!("Failed to prepare the occurrence query: {error}"))?;
     let decode = |row: &rusqlite::Row<'_>| {
         Ok(LexiconOccurrence {
@@ -221,24 +228,65 @@ fn query_occurrences(
         })
     };
     let mut occurrences = morphology_statement
-        .query_map(params![translation_code, morphology_pattern], decode)
+        .query_map(params![translation_code, normalized_lemma], decode)
         .map_err(|error| format!("Failed to find morphology occurrences: {error}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Failed to decode morphology occurrences: {error}"))?;
 
     if occurrences.is_empty() {
-        let original_pattern = format!("%{word}%");
+        let normalized_word = normalize_lexicon_text(word);
         let mut original_statement = connection
-            .prepare(&format!("{select} WHERE v.text_original LIKE ?2 LIMIT 20"))
+            .prepare(
+                "SELECT v.id, v.book, v.chapter, v.verse,
+                        COALESCE(et.text, v.text_en), v.text_original
+                 FROM verses v
+                 LEFT JOIN verse_translations et
+                   ON et.verse_id = v.id AND et.translation_code = ?1
+                 WHERE v.text_original IS NOT NULL AND v.text_original <> ''",
+            )
             .map_err(|error| format!("Failed to prepare the original-text query: {error}"))?;
-        occurrences = original_statement
-            .query_map(params![translation_code, original_pattern], decode)
-            .map_err(|error| format!("Failed to find original-text occurrences: {error}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to decode original-text occurrences: {error}"))?;
+        let mut rows = original_statement
+            .query([translation_code])
+            .map_err(|error| format!("Failed to find original-text occurrences: {error}"))?;
+        while let Some(row) = rows
+            .next()
+            .map_err(|error| format!("Failed to scan original-text occurrences: {error}"))?
+        {
+            let occurrence = decode(row)
+                .map_err(|error| format!("Failed to decode original-text occurrence: {error}"))?;
+            if occurrence
+                .text_original
+                .split_whitespace()
+                .any(|token| normalize_lexicon_text(token) == normalized_word)
+            {
+                occurrences.push(occurrence);
+                if occurrences.len() == 20 {
+                    break;
+                }
+            }
+        }
     }
 
     Ok(occurrences)
+}
+
+fn query_strongs_occurrences(
+    connection: &rusqlite::Connection,
+    strongs_id: &str,
+    translation_code: &str,
+) -> Result<(String, String, Vec<LexiconOccurrence>), String> {
+    let strongs_id = strongs_id.trim().to_ascii_uppercase();
+    let (lemma, definition) = connection
+        .query_row(
+            "SELECT lemma, definition FROM lexicon_fts WHERE strongs_id = ?1",
+            [&strongs_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("Failed to read Strong's entry {strongs_id}: {error}"))?
+        .ok_or_else(|| format!("Strong's entry '{strongs_id}' was not found."))?;
+    let occurrences = query_occurrences(connection, &lemma, translation_code)?;
+    Ok((lemma, definition, occurrences))
 }
 
 fn normalize_lexicon_text(value: &str) -> String {
@@ -252,6 +300,7 @@ fn normalize_lexicon_text(value: &str) -> String {
         .trim_matches(
             &[
                 '.', ',', ';', ':', '!', '?', '\'', '"', '(', ')', '[', ']', '{', '}', '׃', '-',
+                '־',
             ][..],
         )
         .to_string()
@@ -370,6 +419,7 @@ pub(crate) fn lookup_lexicon(
             "SELECT strongs_id, lemma, definition
              FROM lexicon_fts
              WHERE lexicon_fts MATCH ?1
+             ORDER BY bm25(lexicon_fts)
              LIMIT 30",
         )
         .map_err(|error| format!("Failed to prepare lexicon search: {error}"))?;
@@ -401,23 +451,47 @@ pub(crate) fn lookup_lexicon(
 
     let mut dictionary_statement = connection
         .prepare(
-            "SELECT name, definition_text
-             FROM dictionary_fts
+            "SELECT d.id, f.slug, f.name, d.source, f.definition_text
+             FROM dictionary_fts f
+             JOIN dictionary_definitions d
+               ON d.entry_slug = f.slug AND d.definition_text = f.definition_text
              WHERE dictionary_fts MATCH ?1
+             ORDER BY bm25(dictionary_fts)
              LIMIT 30",
         )
         .map_err(|error| format!("Failed to prepare dictionary search: {error}"))?;
     let dictionary = dictionary_statement
         .query_map([word], |row| {
             Ok(DictionaryEntry {
-                name: row.get(0)?,
-                definition_text: row.get(1)?,
+                id: row.get(0)?,
+                slug: row.get(1)?,
+                name: row.get(2)?,
+                source: row.get(3)?,
+                definition_text: row.get(4)?,
             })
         })
         .map_err(|error| format!("Dictionary search failed for '{word}': {error}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Failed to decode dictionary results: {error}"))?;
-    let occurrences = query_occurrences(&connection, word, translation_code)?;
+    let has_original_script = word.chars().any(|character| {
+        ('\u{0370}'..='\u{03ff}').contains(&character)
+            || ('\u{1f00}'..='\u{1fff}').contains(&character)
+            || ('\u{0590}'..='\u{05ff}').contains(&character)
+    });
+    let is_strongs_id = {
+        let mut characters = word.chars();
+        matches!(characters.next(), Some('G' | 'g' | 'H' | 'h'))
+            && characters.all(|character| character.is_ascii_digit())
+    };
+    let occurrences = if has_original_script || is_strongs_id {
+        results
+            .first()
+            .map(|entry| query_occurrences(&connection, &entry.lemma, translation_code))
+            .transpose()?
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     Ok(LexiconLookupResponse {
         results,
@@ -429,13 +503,258 @@ pub(crate) fn lookup_lexicon(
 
 #[derive(Serialize)]
 struct TopicEntry {
+    id: i64,
     subject: String,
     entry: String,
 }
 
 #[derive(Serialize)]
+struct BibleNameEntry {
+    name: String,
+    meaning: String,
+}
+
+#[derive(Serialize)]
 pub(crate) struct TopicsResponse {
     topics: Vec<TopicEntry>,
+    names: Vec<BibleNameEntry>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct DictionaryStudyResponse {
+    kind: String,
+    id: String,
+    title: String,
+    subtitle: Option<String>,
+    definition: String,
+    related_verses: Vec<LexiconOccurrence>,
+}
+
+fn load_related_verses(
+    connection: &rusqlite::Connection,
+    verse_ids: impl IntoIterator<Item = String>,
+    translation_code: &str,
+) -> Result<Vec<LexiconOccurrence>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT v.id, v.book, v.chapter, v.verse,
+                    COALESCE(et.text, v.text_en), v.text_original
+             FROM verses v
+             LEFT JOIN verse_translations et
+               ON et.verse_id = v.id AND et.translation_code = ?1
+             WHERE v.id = ?2",
+        )
+        .map_err(|error| format!("Failed to prepare related Scripture lookup: {error}"))?;
+    let mut seen = HashSet::new();
+    let mut verses = Vec::new();
+    for verse_id in verse_ids {
+        if verses.len() == 100 || !seen.insert(verse_id.clone()) {
+            continue;
+        }
+        if let Some(verse) = statement
+            .query_row(params![translation_code, verse_id], |row| {
+                Ok(LexiconOccurrence {
+                    id: row.get(0)?,
+                    book: row.get(1)?,
+                    chapter: row.get(2)?,
+                    verse: row.get(3)?,
+                    text_en: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                    text_original: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                })
+            })
+            .optional()
+            .map_err(|error| format!("Failed to load related Scripture: {error}"))?
+        {
+            verses.push(verse);
+        }
+    }
+    Ok(verses)
+}
+
+fn parse_naves_references(entry: &str) -> Vec<String> {
+    let book_codes = OLD_TESTAMENT
+        .iter()
+        .chain(NEW_TESTAMENT.iter())
+        .copied()
+        .collect::<Vec<_>>()
+        .join("|");
+    let verse_list = r"\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*";
+    let pattern = format!(r"\b({book_codes})\s+(\d+:{verse_list}(?:\s*;\s*\d+:{verse_list})*)");
+    let Ok(reference_pattern) = Regex::new(&pattern) else {
+        return Vec::new();
+    };
+    let mut references = Vec::new();
+    for captures in reference_pattern.captures_iter(entry) {
+        let Some(book) = captures.get(1).map(|value| value.as_str()) else {
+            continue;
+        };
+        let Some(groups) = captures.get(2).map(|value| value.as_str()) else {
+            continue;
+        };
+        for group in groups.split(';') {
+            let Some((chapter, verses)) = group.trim().split_once(':') else {
+                continue;
+            };
+            let Ok(chapter) = chapter.parse::<i64>() else {
+                continue;
+            };
+            for verse_part in verses.split(',') {
+                if let Some((start, end)) = verse_part.split_once('-') {
+                    let (Ok(start), Ok(end)) = (start.parse::<i64>(), end.parse::<i64>()) else {
+                        continue;
+                    };
+                    if start <= end && end - start <= 200 {
+                        references
+                            .extend((start..=end).map(|verse| format!("{book}.{chapter}.{verse}")));
+                    }
+                } else if let Ok(verse) = verse_part.parse::<i64>() {
+                    references.push(format!("{book}.{chapter}.{verse}"));
+                }
+            }
+        }
+    }
+    references
+}
+
+#[tauri::command]
+pub(crate) fn fetch_dictionary_study(
+    kind: String,
+    entry_id: String,
+    translation_code: Option<String>,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<DictionaryStudyResponse, String> {
+    let kind = kind.trim().to_ascii_lowercase();
+    let entry_id = entry_id.trim();
+    if entry_id.is_empty() {
+        return Err("A dictionary study identifier is required.".to_string());
+    }
+    let translation_code = normalize_english_translation(translation_code.as_deref());
+    let connection = open_database(&state.path)?;
+    if cfg!(debug_assertions) {
+        eprintln!("[Research] dictionary study kind={kind} id={entry_id}");
+    }
+
+    let response = match kind.as_str() {
+        "strongs" => {
+            let strongs_id = entry_id.to_ascii_uppercase();
+            let (lemma, definition, related_verses) =
+                query_strongs_occurrences(&connection, &strongs_id, translation_code)?;
+            Ok(DictionaryStudyResponse {
+                kind,
+                id: strongs_id.clone(),
+                title: lemma,
+                subtitle: Some(format!("Strong's {strongs_id}")),
+                definition,
+                related_verses,
+            })
+        }
+        "dictionary" => {
+            let definition_id = entry_id
+                .parse::<i64>()
+                .map_err(|_| "A numeric dictionary definition identifier is required.".to_string())?;
+            let (slug, name, source, definition) = connection
+                .query_row(
+                    "SELECT d.entry_slug, e.name, d.source, d.definition_text
+                     FROM dictionary_definitions d
+                     JOIN dictionary_entries e ON e.slug = d.entry_slug
+                     WHERE d.id = ?1",
+                    [definition_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(|error| format!("Failed to read dictionary entry {definition_id}: {error}"))?
+                .ok_or_else(|| format!("Dictionary entry '{definition_id}' was not found."))?;
+            let mut reference_statement = connection
+                .prepare(
+                    "SELECT verse_id FROM dictionary_scripture_refs
+                     WHERE entry_slug = ?1 ORDER BY id",
+                )
+                .map_err(|error| format!("Failed to prepare dictionary references: {error}"))?;
+            let references = reference_statement
+                .query_map([slug], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("Failed to read dictionary references: {error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Failed to decode dictionary references: {error}"))?;
+            Ok(DictionaryStudyResponse {
+                kind,
+                id: definition_id.to_string(),
+                title: name,
+                subtitle: Some(source),
+                definition,
+                related_verses: load_related_verses(
+                    &connection,
+                    references,
+                    translation_code,
+                )?,
+            })
+        }
+        "topic" => {
+            let topic_id = entry_id
+                .parse::<i64>()
+                .map_err(|_| "A numeric topical entry identifier is required.".to_string())?;
+            let (subject, entry) = connection
+                .query_row(
+                    "SELECT subject, entry FROM naves_topical_dictionary WHERE id = ?1",
+                    [topic_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(|error| format!("Failed to read topical entry {topic_id}: {error}"))?
+                .ok_or_else(|| format!("Topical entry '{topic_id}' was not found."))?;
+            let references = parse_naves_references(&entry);
+            Ok(DictionaryStudyResponse {
+                kind,
+                id: topic_id.to_string(),
+                title: subject,
+                subtitle: Some("Nave's Topical Index".to_string()),
+                definition: entry,
+                related_verses: load_related_verses(
+                    &connection,
+                    references,
+                    translation_code,
+                )?,
+            })
+        }
+        "name" => {
+            let (name, meaning) = connection
+                .query_row(
+                    "SELECT name, meaning FROM bible_names_dictionary
+                     WHERE name = ?1 COLLATE NOCASE",
+                    [entry_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(|error| format!("Failed to read Bible-name entry '{entry_id}': {error}"))?
+                .ok_or_else(|| format!("Bible-name entry '{entry_id}' was not found."))?;
+            Ok(DictionaryStudyResponse {
+                kind,
+                id: name.clone(),
+                title: name,
+                subtitle: Some("Hitchcock's Bible Names".to_string()),
+                definition: meaning,
+                related_verses: Vec::new(),
+            })
+        }
+        _ => Err(format!(
+            "Unsupported dictionary study kind '{kind}'. Expected strongs, dictionary, topic, or name."
+        )),
+    }?;
+    if cfg!(debug_assertions) {
+        eprintln!(
+            "[Research] dictionary study kind={} id={} related_verses={}",
+            response.kind,
+            response.id,
+            response.related_verses.len()
+        );
+    }
+    Ok(response)
 }
 
 #[derive(Serialize)]
@@ -640,21 +959,46 @@ pub(crate) fn fetch_research_meta(
             }
             let mut statement = connection
                 .prepare(
-                    "SELECT subject, entry FROM naves_fts
-                     WHERE naves_fts MATCH ?1 LIMIT 30",
+                    "SELECT rowid, subject, entry FROM naves_fts
+                     WHERE naves_fts MATCH ?1
+                     ORDER BY bm25(naves_fts)
+                     LIMIT 30",
                 )
                 .map_err(|error| format!("Failed to prepare topical search: {error}"))?;
             let topics = statement
                 .query_map([query], |row| {
                     Ok(TopicEntry {
-                        subject: row.get(0)?,
-                        entry: row.get(1)?,
+                        id: row.get(0)?,
+                        subject: row.get(1)?,
+                        entry: row.get(2)?,
                     })
                 })
                 .map_err(|error| format!("Topical search failed for '{query}': {error}"))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| format!("Failed to decode topical results: {error}"))?;
-            Ok(ResearchMetaResponse::Topics(TopicsResponse { topics }))
+            let name_pattern = format!("%{query}%");
+            let mut name_statement = connection
+                .prepare(
+                    "SELECT name, meaning FROM bible_names_dictionary
+                     WHERE name LIKE ?1 COLLATE NOCASE
+                     ORDER BY CASE WHEN name = ?2 COLLATE NOCASE THEN 0 ELSE 1 END, name
+                     LIMIT 20",
+                )
+                .map_err(|error| format!("Failed to prepare Bible-name search: {error}"))?;
+            let names = name_statement
+                .query_map(params![name_pattern, query], |row| {
+                    Ok(BibleNameEntry {
+                        name: row.get(0)?,
+                        meaning: row.get(1)?,
+                    })
+                })
+                .map_err(|error| format!("Bible-name search failed for '{query}': {error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Failed to decode Bible-name results: {error}"))?;
+            Ok(ResearchMetaResponse::Topics(TopicsResponse {
+                topics,
+                names,
+            }))
         }
         "biography" => {
             let person_id = value.as_deref().map(str::trim).unwrap_or_default();
@@ -1319,4 +1663,158 @@ pub(crate) fn search_sessions(
     }
     .map_err(|error| format!("Failed to decode session search results: {error}"))?;
     Ok(SessionSearchResponse { sessions })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        load_related_verses, parse_naves_references, query_occurrences, query_strongs_occurrences,
+    };
+    use rusqlite::{params, Connection};
+
+    fn research_connection() -> Connection {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE verses (
+                    id TEXT PRIMARY KEY,
+                    book TEXT,
+                    chapter INTEGER,
+                    verse INTEGER,
+                    text_en TEXT,
+                    text_original TEXT,
+                    morphology TEXT
+                );
+                CREATE TABLE verse_translations (
+                    verse_id TEXT,
+                    translation_code TEXT,
+                    text TEXT
+                );
+                CREATE VIRTUAL TABLE lexicon_fts USING fts5(
+                    strongs_id,
+                    lemma,
+                    definition
+                );
+                ",
+            )
+            .unwrap();
+        connection
+    }
+
+    fn insert_verse(connection: &Connection, id: &str, original: &str, morphology: &str) {
+        let mut parts = id.split('.');
+        let book = parts.next().unwrap();
+        let chapter = parts.next().unwrap().parse::<i64>().unwrap();
+        let verse = parts.next().unwrap().parse::<i64>().unwrap();
+        connection
+            .execute(
+                "INSERT INTO verses
+                 (id, book, chapter, verse, text_en, text_original, morphology)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    id,
+                    book,
+                    chapter,
+                    verse,
+                    format!("Text for {id}"),
+                    original,
+                    morphology
+                ],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn strongs_lookup_resolves_exact_id_before_matching_lemma() {
+        let connection = research_connection();
+        connection
+            .execute(
+                "INSERT INTO lexicon_fts (strongs_id, lemma, definition)
+                 VALUES ('G907', 'βαπτίζω', 'immerse'), ('G90', 'βαπτός', 'dipped')",
+                [],
+            )
+            .unwrap();
+        insert_verse(
+            &connection,
+            "ACT.2.38",
+            "βαπτισθήτω",
+            r#"[{"word":"βαπτισθήτω","lemma":"βαπτίζω"}]"#,
+        );
+        insert_verse(
+            &connection,
+            "MAT.1.1",
+            "βαπτός",
+            r#"[{"word":"βαπτός","lemma":"βαπτός"}]"#,
+        );
+
+        let (_, _, occurrences) = query_strongs_occurrences(&connection, "G907", "en").unwrap();
+        assert_eq!(
+            occurrences
+                .iter()
+                .map(|verse| verse.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ACT.2.38"]
+        );
+    }
+
+    #[test]
+    fn occurrence_fallback_matches_whole_normalized_original_tokens() {
+        let connection = research_connection();
+        insert_verse(&connection, "GEN.1.1", "אֱלֹהִים בָּרָא", "[]");
+        insert_verse(&connection, "GEN.1.2", "בֵּאלֹהִים", "[]");
+
+        let occurrences = query_occurrences(&connection, "אֱלֹהִים", "en").unwrap();
+        assert_eq!(
+            occurrences
+                .iter()
+                .map(|verse| verse.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["GEN.1.1"]
+        );
+    }
+
+    #[test]
+    fn parses_naves_book_context_lists_and_ranges() {
+        let references =
+            parse_naves_references("MAT 3:5-6,11; 21:25; MRK 1:4,8-9 and a cross-topic note");
+        assert_eq!(
+            references,
+            vec![
+                "MAT.3.5",
+                "MAT.3.6",
+                "MAT.3.11",
+                "MAT.21.25",
+                "MRK.1.4",
+                "MRK.1.8",
+                "MRK.1.9",
+            ]
+        );
+    }
+
+    #[test]
+    fn related_verses_use_only_explicit_existing_ids() {
+        let connection = research_connection();
+        insert_verse(&connection, "MAT.28.19", "text", "[]");
+        insert_verse(&connection, "ACT.18.26", "text", "[]");
+
+        let verses = load_related_verses(
+            &connection,
+            vec![
+                "MAT.28.19".to_string(),
+                "MISSING.1.1".to_string(),
+                "ACT.18.26".to_string(),
+                "MAT.28.19".to_string(),
+            ],
+            "en",
+        )
+        .unwrap();
+        assert_eq!(
+            verses
+                .iter()
+                .map(|verse| verse.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["MAT.28.19", "ACT.18.26"]
+        );
+    }
 }
