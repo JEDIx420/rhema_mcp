@@ -17,7 +17,7 @@ No Python process or localhost API is required.
 | Script | Purpose |
 |---|---|
 | `npm run dev` | Run the embedded interface during Tauri development |
-| `npm run typecheck` | TypeScript validation |
+| `npm run typecheck` | Generate Next route types, then run TypeScript validation |
 | `npm run lint` | ESLint validation |
 | `npm run build` | Build the static interface into `out/` |
 | `npm run verify:desktop` | Validate native database, speech model, fonts, and Tauri configuration |
@@ -33,6 +33,8 @@ No Python process or localhost API is required.
 - Session PDF export uses a single native Rust command to choose the destination and write the file.
 
 Tauri bundles `rhelo.db`, `ggml-base.bin`, and the Noto font family. On first launch the seed database is copied to the platform app-data directory. PDF generation embeds the bundled Noto fonts so English, Greek, Hebrew, Devanagari, Telugu, Malayalam, and Tamil remain offline and portable.
+
+The current database schema version is stored once in `../schema-version.txt`. The Rust build, seed finalization step, and desktop asset verification all consume that value. See `../docs/DATABASE_MIGRATIONS.md` for backup and recovery behavior.
 
 `dragDropEnabled: false` in `tauri.conf.json` is mandatory on macOS; otherwise Tauri's native file-drop handler intercepts Rhelo's internal HTML drag events.
 

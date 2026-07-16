@@ -12,7 +12,7 @@ export const TtsWarning = () => {
     <div className="fixed bottom-4 right-4 z-50 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-lg">
       <h3 className="text-sm font-bold text-amber-800">Greek Voice Missing</h3>
       <p className="mt-1 text-xs text-amber-700">
-        We couldn't detect a Greek voice pack on your system.
+        We couldn&apos;t detect a Greek voice pack on your system.
       </p>
       <button
         onClick={openSpeechSettings}

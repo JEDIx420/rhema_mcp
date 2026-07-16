@@ -13,6 +13,6 @@ export const openSpeechSettings = async () => {
     await open(getSettingsUri());
   } catch (err) {
     console.error("Failed to open speech settings:", err);
-    alert("Please open your system speech settings and install a Greek voice pack.");
+    alert("Please open your system speech settings and install the matching Greek or Hebrew voice pack.");
   }
 };

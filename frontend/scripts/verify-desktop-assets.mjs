@@ -1,6 +1,9 @@
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
+const repositoryRoot = resolve("..");
+const schemaVersionPath = resolve(repositoryRoot, "schema-version.txt");
+const databasePath = resolve(repositoryRoot, "rhelo.db");
 const fontFiles = [
   "NotoSans-Regular.ttf",
   "NotoSansHebrew-Regular.ttf",
@@ -10,8 +13,8 @@ const fontFiles = [
   "NotoSansTamil-Regular.ttf",
 ];
 const requiredAssets = [
-  { path: resolve("..", "rhelo.db"), minimumBytes: 1_000_000, label: "Rhelo database" },
-  { path: resolve("..", "ggml-base.bin"), minimumBytes: 1_000_000, label: "Whisper model" },
+  { path: databasePath, minimumBytes: 1_000_000, label: "Rhelo database" },
+  { path: resolve(repositoryRoot, "ggml-base.bin"), minimumBytes: 1_000_000, label: "Whisper model" },
   ...fontFiles.map((filename) => ({
     path: resolve("src-tauri", "resources", "fonts", filename),
     minimumBytes: 10_000,
@@ -26,6 +29,27 @@ for (const asset of requiredAssets) {
   } catch {
     failures.push(`${asset.label} is missing: ${asset.path}`);
   }
+}
+
+try {
+  const expectedSchemaVersion = Number.parseInt(readFileSync(schemaVersionPath, "ascii").trim(), 10);
+  if (!Number.isSafeInteger(expectedSchemaVersion) || expectedSchemaVersion < 0) {
+    failures.push(`${schemaVersionPath} must contain a non-negative integer`);
+  } else {
+    const databaseHeader = readFileSync(databasePath).subarray(0, 100);
+    if (databaseHeader.toString("ascii", 0, 16) !== "SQLite format 3\u0000") {
+      failures.push(`Rhelo database does not have a valid SQLite header: ${databasePath}`);
+    } else {
+      const bundledSchemaVersion = databaseHeader.readUInt32BE(60);
+      if (bundledSchemaVersion !== expectedSchemaVersion) {
+        failures.push(
+          `Bundled database user_version is ${bundledSchemaVersion}, but schema-version.txt requires ${expectedSchemaVersion}`
+        );
+      }
+    }
+  }
+} catch (error) {
+  failures.push(`Bundled database schema version could not be validated: ${error}`);
 }
 
 try {

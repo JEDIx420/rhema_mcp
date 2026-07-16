@@ -252,6 +252,34 @@ export async function fetchStats(): Promise<StatsResponse> {
   return invokeDesktop<StatsResponse>("fetch_stats");
 }
 
+export interface TtsVoiceDescriptor {
+  name: string;
+  language: string;
+}
+
+export interface TtsVoiceSelection {
+  requested_language: string;
+  normalized_locale: string;
+  selected_voice: TtsVoiceDescriptor | null;
+  available: boolean;
+  reason: string | null;
+}
+
+export interface TtsDiagnosticsResponse {
+  os: string;
+  native_tts_available: boolean;
+  initialization_error: string | null;
+  current_schema_version: number;
+  detected_voices: TtsVoiceDescriptor[];
+  english: TtsVoiceSelection;
+  greek: TtsVoiceSelection;
+  hebrew: TtsVoiceSelection;
+}
+
+export async function fetchTtsDiagnostics(): Promise<TtsDiagnosticsResponse> {
+  return invokeDesktop<TtsDiagnosticsResponse>("fetch_tts_diagnostics");
+}
+
 export interface GeographyRoute {
   route_id: string;
   title: string;

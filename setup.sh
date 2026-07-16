@@ -45,5 +45,8 @@ python3 migrations/011_sessions_schema.py
 echo "[12/12] Adding BSB, WEB, and KJV English translations..."
 python3 migrations/012_add_english_translations.py
 
+echo "Finalizing the seed database schema version..."
+python3 scripts/finalize_seed_database.py
+
 echo "=== Setup Completed! Database is fully populated. ==="
 echo "Run the native app with: cd frontend && npm run tauri dev"

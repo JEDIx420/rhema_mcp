@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { normalizeSpeechLocale } from "@/lib/speech";
 
 type TtsStatus = "checking" | "ready" | "missing";
 
@@ -12,23 +13,36 @@ export const useTtsDetector = (lang: string = "el-GR") => {
     let cancelled = false;
     let retries = 0;
     const maxRetries = 10;
+    const normalizedTarget = normalizeSpeechLocale(lang);
+    const targetBase = normalizedTarget.split("-")[0];
+    const aliases =
+      normalizedTarget === "he-il"
+        ? ["he-il", "he", "iw-il", "iw"]
+        : normalizedTarget === "el-gr"
+          ? ["el-gr", "el"]
+          : ["en-us", "en-gb", "en"];
 
     const matchesLanguage = (voiceLang: string) => {
       const normalizedVoice = normalizeLanguage(voiceLang);
-      const normalizedTarget = normalizeLanguage(lang);
-      const targetBase = normalizedTarget.split("-")[0];
       const voiceBase = normalizedVoice.split("-")[0];
       return (
         normalizedVoice === normalizedTarget ||
         voiceBase === targetBase ||
-        normalizedVoice.startsWith(`${targetBase}-`)
+        normalizedVoice.startsWith(`${targetBase}-`) ||
+        aliases.includes(normalizedVoice)
       );
     };
 
     const checkVoices = () => {
       if (cancelled) return false;
       const voices = window.speechSynthesis.getVoices();
-      if (voices.some((voice) => matchesLanguage(voice.lang) || /greek|stefanos/i.test(voice.name))) {
+      if (
+        voices.some((voice) =>
+          matchesLanguage(voice.lang) ||
+          (targetBase === "el" && /greek|stefanos/i.test(voice.name)) ||
+          (targetBase === "he" && /hebrew/i.test(voice.name)),
+        )
+      ) {
         setStatus("ready");
         return true;
       }

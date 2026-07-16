@@ -1,7 +1,11 @@
-name: Build Release
+name: Build Desktop Installers
 
 on:
   push:
+    branches:
+      - main
+      - release/v1.0-stabilization
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -9,7 +13,7 @@ on:
 jobs:
   build:
     permissions:
-      contents: write
+      contents: read
 
     strategy:
       fail-fast: false
@@ -47,9 +51,25 @@ jobs:
         working-directory: frontend
         run: npm run verify:desktop
 
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
       - name: Initialize database snapshot
         shell: bash
         run: bash setup.sh
+
+      - name: Verify finalized desktop assets
+        working-directory: frontend
+        run: npm run verify:desktop
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -70,17 +90,22 @@ jobs:
         shell: bash
         run: echo "LIBCLANG_PATH=${{ env.LLVM_PATH }}/bin" >> "$GITHUB_ENV"
 
+      - name: Check Rust formatting
+        working-directory: frontend/src-tauri
+        run: cargo fmt --check
+
+      - name: Run clippy
+        working-directory: frontend/src-tauri
+        run: cargo clippy --all-targets --all-features
+
+      - name: Run Rust tests
+        working-directory: frontend/src-tauri
+        run: cargo test
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: frontend
-          tagName: app-v__VERSION__
-          releaseName: Rhelo v__VERSION__
-          releaseBody: Automated desktop build for Rhelo.
-          releaseDraft: false
-          prerelease: false
           args: --bundles ${{ matrix.bundle_dir }}
 
       - name: Upload bundled installer
