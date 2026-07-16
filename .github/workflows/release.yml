@@ -141,21 +141,43 @@ jobs:
           fi
 
           LIBCLANG_DIR="$(dirname "$LIBCLANG_FILE")"
-          EXISTING_DYLD="$(printf '%s' "${DYLD_LIBRARY_PATH:-}" \
-            | tr ':' '\n' \
-            | awk 'NF && $0 != "undefined" && !seen[$0]++' \
-            | paste -sd: -)"
-
           echo "LIBCLANG_PATH=$LIBCLANG_DIR" >> "$GITHUB_ENV"
-          if [ -n "$EXISTING_DYLD" ]; then
-            echo "DYLD_LIBRARY_PATH=$LIBCLANG_DIR:$EXISTING_DYLD" >> "$GITHUB_ENV"
-          else
-            echo "DYLD_LIBRARY_PATH=$LIBCLANG_DIR" >> "$GITHUB_ENV"
-          fi
+
+          # install-llvm-action exports loader paths globally. Clear them so
+          # later Node and system processes use the macOS system libraries.
+          echo "DYLD_LIBRARY_PATH=" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=" >> "$GITHUB_ENV"
+
+      - name: Verify macOS tool environment
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "LIBCLANG_PATH=$LIBCLANG_PATH"
+          echo "DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH-<unset>}"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH-<unset>}"
+          which cargo
+          cargo --version
+          which node
+          node --version
+          otool -L "$(which node)" || true
+          otool -L "$LIBCLANG_PATH/libclang.dylib" || true
 
       - name: Check Rust formatting
         working-directory: frontend/src-tauri
         run: cargo fmt --check
+
+      - name: Verify macOS libclang binding
+        if: runner.os == 'macOS'
+        working-directory: frontend/src-tauri
+        shell: bash
+        run: |
+          test -f "$LIBCLANG_PATH/libclang.dylib" || {
+            echo "::error::libclang.dylib not found in LIBCLANG_PATH"
+            exit 1
+          }
+          file "$LIBCLANG_PATH/libclang.dylib"
+          lipo -info "$LIBCLANG_PATH/libclang.dylib" || true
+          cargo check
 
       - name: Run clippy
         working-directory: frontend/src-tauri
