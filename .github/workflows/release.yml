@@ -85,10 +85,73 @@ jobs:
         shell: pwsh
         run: echo "LIBCLANG_PATH=${{ env.LLVM_PATH }}/bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Configure LIBCLANG_PATH
-        if: runner.os != 'Windows'
+      - name: Inspect macOS LLVM installation
+        if: runner.os == 'macOS'
         shell: bash
-        run: echo "LIBCLANG_PATH=${{ env.LLVM_PATH }}/bin" >> "$GITHUB_ENV"
+        run: |
+          echo "RUNNER_OS=$RUNNER_OS"
+          uname -a
+          uname -m
+          echo "LLVM_PATH=$LLVM_PATH"
+          echo "LIBCLANG_PATH=${LIBCLANG_PATH:-}"
+          echo "DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH:-}"
+
+          echo "LLVM directory structure:"
+          find "$LLVM_PATH" -maxdepth 3 -type d -print | sort
+
+          echo "Matching libclang dynamic libraries:"
+          find "$LLVM_PATH" -maxdepth 5 \
+            \( -name "libclang.dylib" \
+            -o -name "libclang.*.dylib" \
+            -o -name "libclang*.dylib" \) \
+            -print
+
+          ls -la "$LLVM_PATH"
+          ls -la "$LLVM_PATH/bin" || true
+          ls -la "$LLVM_PATH/lib" || true
+
+          "$LLVM_PATH/bin/clang" --version || clang --version
+          xcrun --find clang || true
+          xcrun --show-sdk-path || true
+
+      - name: Configure macOS LIBCLANG_PATH
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          LIBCLANG_FILE="$(find "$LLVM_PATH" -type f \
+            \( -name "libclang.dylib" -o -name "libclang.*.dylib" \) \
+            -print -quit)"
+
+          if [ -z "$LIBCLANG_FILE" ]; then
+            echo "::error::libclang dylib was not found under $LLVM_PATH"
+            find "$LLVM_PATH" -maxdepth 4 -type f -print | sort
+            exit 1
+          fi
+
+          echo "Using libclang at: $LIBCLANG_FILE"
+          file "$LIBCLANG_FILE"
+          LIPO_INFO="$(lipo -info "$LIBCLANG_FILE" 2>&1 || true)"
+          echo "$LIPO_INFO"
+
+          if [ "$(uname -m)" = "arm64" ] \
+            && ! file "$LIBCLANG_FILE" | grep -q "arm64" \
+            && ! printf '%s\n' "$LIPO_INFO" | grep -q "arm64"; then
+            echo "::error::The discovered libclang is not compatible with the arm64 macOS runner"
+            exit 1
+          fi
+
+          LIBCLANG_DIR="$(dirname "$LIBCLANG_FILE")"
+          EXISTING_DYLD="$(printf '%s' "${DYLD_LIBRARY_PATH:-}" \
+            | tr ':' '\n' \
+            | awk 'NF && $0 != "undefined" && !seen[$0]++' \
+            | paste -sd: -)"
+
+          echo "LIBCLANG_PATH=$LIBCLANG_DIR" >> "$GITHUB_ENV"
+          if [ -n "$EXISTING_DYLD" ]; then
+            echo "DYLD_LIBRARY_PATH=$LIBCLANG_DIR:$EXISTING_DYLD" >> "$GITHUB_ENV"
+          else
+            echo "DYLD_LIBRARY_PATH=$LIBCLANG_DIR" >> "$GITHUB_ENV"
+          fi
 
       - name: Check Rust formatting
         working-directory: frontend/src-tauri
