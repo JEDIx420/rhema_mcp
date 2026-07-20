@@ -1,6 +1,6 @@
 [package]
 name = "rhelo"
-version = "0.1.0"
+version = "0.1.1"
 description = "Offline-first Bible study desktop application"
 authors = ["Rhelo contributors"]
 license = ""

@@ -23,6 +23,34 @@ const requiredAssets = [
 ];
 
 const failures = [];
+
+try {
+  const packageManifest = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+  const packageLock = JSON.parse(readFileSync(resolve("package-lock.json"), "utf8"));
+  const tauriConfig = JSON.parse(readFileSync(resolve("src-tauri", "tauri.conf.json"), "utf8"));
+  const cargoManifest = readFileSync(resolve("src-tauri", "Cargo.toml"), "utf8");
+  const cargoLock = readFileSync(resolve("src-tauri", "Cargo.lock"), "utf8");
+  const cargoPackage = cargoManifest.match(/^\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m);
+  const cargoLockPackage = cargoLock.match(/^\[\[package\]\]\nname = "rhelo"\nversion = "([^"]+)"/m);
+  const versions = {
+    "package.json": packageManifest.version,
+    "package-lock.json": packageLock.version,
+    "package-lock.json root package": packageLock.packages?.[""]?.version,
+    "Cargo.toml": cargoPackage?.[1],
+    "Cargo.lock": cargoLockPackage?.[1],
+    "tauri.conf.json": tauriConfig.version,
+  };
+  const expectedVersion = packageManifest.version;
+  for (const [source, version] of Object.entries(versions)) {
+    if (!version) failures.push(`Desktop version is missing from ${source}`);
+    else if (version !== expectedVersion) {
+      failures.push(`Desktop version mismatch: ${source} is ${version}, expected ${expectedVersion}`);
+    }
+  }
+} catch (error) {
+  failures.push(`Desktop application versions could not be validated: ${error}`);
+}
+
 for (const asset of requiredAssets) {
   try {
     if (statSync(asset.path).size < asset.minimumBytes) failures.push(`${asset.label} is empty or incomplete: ${asset.path}`);

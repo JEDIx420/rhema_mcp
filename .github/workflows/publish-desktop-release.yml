@@ -1,0 +1,279 @@
+name: Publish Desktop Release
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+
+jobs:
+  build:
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            bundle: dmg
+            bundle_glob: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            artifact_name: rhelo-desktop-macos-arm64
+            optional: false
+          - platform: macos-15-intel
+            bundle: dmg
+            bundle_glob: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            artifact_name: rhelo-desktop-macos-x64
+            optional: true
+          - platform: windows-latest
+            bundle: msi
+            bundle_glob: frontend/src-tauri/target/release/bundle/msi/*.msi
+            artifact_name: rhelo-desktop-windows-x64
+            optional: false
+
+    runs-on: ${{ matrix.platform }}
+    continue-on-error: ${{ matrix.optional }}
+
+    steps:
+      - name: Validate desktop release tag
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+-(beta\.[0-9]+|rc\.[0-9]+|stable)-[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
+            echo "::error::Unsupported desktop release tag: $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify desktop assets
+        working-directory: frontend
+        run: npm run verify:desktop
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Finalize database snapshot
+        shell: bash
+        run: bash setup.sh
+
+      - name: Verify finalized desktop assets
+        working-directory: frontend
+        run: npm run verify:desktop
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM for whisper-rs
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "16.0"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Configure Windows LIBCLANG_PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: echo "LIBCLANG_PATH=${{ env.LLVM_PATH }}/bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure macOS LIBCLANG_PATH
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          LIBCLANG_FILE="$(find "$LLVM_PATH" -type f \
+            \( -name "libclang.dylib" -o -name "libclang.*.dylib" \) \
+            -print -quit)"
+
+          if [ -z "$LIBCLANG_FILE" ]; then
+            echo "::error::libclang dylib was not found under $LLVM_PATH"
+            find "$LLVM_PATH" -maxdepth 4 -type f -print | sort
+            exit 1
+          fi
+
+          echo "Using libclang at: $LIBCLANG_FILE"
+          file "$LIBCLANG_FILE"
+          LIPO_INFO="$(lipo -info "$LIBCLANG_FILE" 2>&1 || true)"
+          echo "$LIPO_INFO"
+
+          RUNNER_ARCH="$(uname -m)"
+          if ! file "$LIBCLANG_FILE" | grep -q "$RUNNER_ARCH" \
+            && ! printf '%s\n' "$LIPO_INFO" | grep -q "$RUNNER_ARCH"; then
+            echo "::error::The discovered libclang is not compatible with the $RUNNER_ARCH macOS runner"
+            exit 1
+          fi
+
+          echo "LIBCLANG_PATH=$(dirname "$LIBCLANG_FILE")" >> "$GITHUB_ENV"
+
+          # Do not leak LLVM loader paths into Node, system tools, or packaging.
+          echo "DYLD_LIBRARY_PATH=" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=" >> "$GITHUB_ENV"
+
+      - name: Check Rust formatting
+        working-directory: frontend/src-tauri
+        run: cargo fmt --check
+
+      - name: Run clippy
+        working-directory: frontend/src-tauri
+        run: cargo clippy --all-targets --all-features
+
+      - name: Run Rust tests
+        working-directory: frontend/src-tauri
+        run: cargo test
+
+      - name: Build Tauri installer
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: frontend
+          args: --bundles ${{ matrix.bundle }}
+
+      - name: Upload platform installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.bundle_glob }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+
+      - name: Reject duplicate release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::A GitHub Release already exists for $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Download platform installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rhelo-desktop-*
+          path: artifacts
+
+      - name: Prepare dated release assets and metadata
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+
+          if [[ "$TAG" =~ ^desktop-v([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)-([0-9]{4}\.[0-9]{2}\.[0-9]{2})$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            ITERATION="${BASH_REMATCH[2]}"
+            DATE_DOTTED="${BASH_REMATCH[3]}"
+            CHANNEL_ASSET="Beta${ITERATION}"
+            TITLE_CHANNEL="Beta ${ITERATION}"
+            PRERELEASE=true
+          elif [[ "$TAG" =~ ^desktop-v([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)-([0-9]{4}\.[0-9]{2}\.[0-9]{2})$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            ITERATION="${BASH_REMATCH[2]}"
+            DATE_DOTTED="${BASH_REMATCH[3]}"
+            CHANNEL_ASSET="RC${ITERATION}"
+            TITLE_CHANNEL="Release Candidate ${ITERATION}"
+            PRERELEASE=true
+          elif [[ "$TAG" =~ ^desktop-v([0-9]+\.[0-9]+\.[0-9]+)-stable-([0-9]{4}\.[0-9]{2}\.[0-9]{2})$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            DATE_DOTTED="${BASH_REMATCH[2]}"
+            CHANNEL_ASSET="Stable"
+            TITLE_CHANNEL="Stable"
+            PRERELEASE=false
+          else
+            echo "::error::Unsupported desktop release tag: $TAG"
+            exit 1
+          fi
+
+          DATE_TITLE="${DATE_DOTTED//./-}"
+          NOTES_FILE="docs/releases/${TAG}.md"
+          test -f "$NOTES_FILE" || {
+            echo "::error::Release notes are missing: $NOTES_FILE"
+            exit 1
+          }
+
+          mkdir -p release-assets
+
+          mapfile -t ARM_DMGS < <(find artifacts/rhelo-desktop-macos-arm64 -type f -name '*.dmg' 2>/dev/null)
+          mapfile -t WINDOWS_MSIS < <(find artifacts/rhelo-desktop-windows-x64 -type f -name '*.msi' 2>/dev/null)
+          if [ "${#ARM_DMGS[@]}" -ne 1 ] || [ "${#WINDOWS_MSIS[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one required Apple Silicon DMG and one Windows x64 MSI"
+            exit 1
+          fi
+
+          cp "${ARM_DMGS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-macOS-Apple-Silicon.dmg"
+          cp "${WINDOWS_MSIS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-Windows-x64.msi"
+
+          if [ -d artifacts/rhelo-desktop-macos-x64 ]; then
+            mapfile -t INTEL_DMGS < <(find artifacts/rhelo-desktop-macos-x64 -type f -name '*.dmg')
+            if [ "${#INTEL_DMGS[@]}" -ne 1 ]; then
+              echo "::error::The Intel artifact must contain exactly one DMG"
+              exit 1
+            fi
+            cp "${INTEL_DMGS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-macOS-Intel.dmg"
+            INTEL_BUILT=true
+          else
+            INTEL_BUILT=false
+          fi
+
+          (
+            cd release-assets
+            sha256sum ./*.dmg ./*.msi > SHA256SUMS.txt
+          )
+
+          sed "s/{{COMMIT_SHA}}/$GITHUB_SHA/g" "$NOTES_FILE" > release-notes.md
+          if [ "$INTEL_BUILT" = "true" ]; then
+            sed -i '/<!-- INTEL_DOWNLOAD_START -->/d; /<!-- INTEL_DOWNLOAD_END -->/d' release-notes.md
+          else
+            sed -i '/<!-- INTEL_DOWNLOAD_START -->/,/<!-- INTEL_DOWNLOAD_END -->/d' release-notes.md
+          fi
+          {
+            echo "title=[$DATE_TITLE] Rhelo Desktop $TITLE_CHANNEL — v$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish unified desktop release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TITLE: ${{ steps.release.outputs.title }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_FLAGS=(--verify-tag --latest=false)
+          if [ "$PRERELEASE" = "true" ]; then
+            RELEASE_FLAGS+=(--prerelease)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release-notes.md \
+            "${RELEASE_FLAGS[@]}"
