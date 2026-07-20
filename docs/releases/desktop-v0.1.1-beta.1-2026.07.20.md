@@ -10,15 +10,7 @@ For M1, M2, M3 and M4 Macs.
 
 Asset: `Rhelo-Desktop-v0.1.1-Beta1-2026.07.20-macOS-Apple-Silicon.dmg`
 
-<!-- INTEL_DOWNLOAD_START -->
-### macOS - Intel
-
-For Intel-based Macs.
-
-Asset: `Rhelo-Desktop-v0.1.1-Beta1-2026.07.20-macOS-Intel.dmg`
-
-This asset is included only when the optional Intel build succeeds.
-<!-- INTEL_DOWNLOAD_END -->
+Intel macOS is not included in Beta 1 because the Intel runner's LLVM toolchain is not supported by the current build action. A future desktop release may restore a separately tested Intel build.
 
 ### Windows
 
@@ -37,7 +29,7 @@ Asset: `Rhelo-Desktop-v0.1.1-Beta1-2026.07.20-Windows-x64.msi`
 
 ## macOS Notes
 
-The beta workflow does not configure Apple code signing or notarization, so these DMGs should be treated as unsigned and unnotarized. Testers may need to Control-click Rhelo, choose **Open**, and confirm the prompt, or allow it from **System Settings > Privacy & Security**. Intel compatibility applies only when the separately named Intel DMG is attached to the release.
+The beta workflow does not configure Apple code signing or notarization, so the Apple Silicon DMG should be treated as unsigned and unnotarized. Testers may need to Control-click Rhelo, choose **Open**, and confirm the prompt, or allow it from **System Settings > Privacy & Security**. Beta 1 does not include an Intel-compatible DMG.
 
 ## Windows Notes
 

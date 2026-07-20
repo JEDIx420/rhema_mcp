@@ -18,20 +18,12 @@ jobs:
             bundle: dmg
             bundle_glob: frontend/src-tauri/target/release/bundle/dmg/*.dmg
             artifact_name: rhelo-desktop-macos-arm64
-            optional: false
-          - platform: macos-15-intel
-            bundle: dmg
-            bundle_glob: frontend/src-tauri/target/release/bundle/dmg/*.dmg
-            artifact_name: rhelo-desktop-macos-x64
-            optional: true
           - platform: windows-latest
             bundle: msi
             bundle_glob: frontend/src-tauri/target/release/bundle/msi/*.msi
             artifact_name: rhelo-desktop-windows-x64
-            optional: false
 
     runs-on: ${{ matrix.platform }}
-    continue-on-error: ${{ matrix.optional }}
 
     steps:
       - name: Validate desktop release tag
@@ -230,29 +222,12 @@ jobs:
           cp "${ARM_DMGS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-macOS-Apple-Silicon.dmg"
           cp "${WINDOWS_MSIS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-Windows-x64.msi"
 
-          if [ -d artifacts/rhelo-desktop-macos-x64 ]; then
-            mapfile -t INTEL_DMGS < <(find artifacts/rhelo-desktop-macos-x64 -type f -name '*.dmg')
-            if [ "${#INTEL_DMGS[@]}" -ne 1 ]; then
-              echo "::error::The Intel artifact must contain exactly one DMG"
-              exit 1
-            fi
-            cp "${INTEL_DMGS[0]}" "release-assets/Rhelo-Desktop-v${VERSION}-${CHANNEL_ASSET}-${DATE_DOTTED}-macOS-Intel.dmg"
-            INTEL_BUILT=true
-          else
-            INTEL_BUILT=false
-          fi
-
           (
             cd release-assets
             sha256sum ./*.dmg ./*.msi > SHA256SUMS.txt
           )
 
           sed "s/{{COMMIT_SHA}}/$GITHUB_SHA/g" "$NOTES_FILE" > release-notes.md
-          if [ "$INTEL_BUILT" = "true" ]; then
-            sed -i '/<!-- INTEL_DOWNLOAD_START -->/d; /<!-- INTEL_DOWNLOAD_END -->/d' release-notes.md
-          else
-            sed -i '/<!-- INTEL_DOWNLOAD_START -->/,/<!-- INTEL_DOWNLOAD_END -->/d' release-notes.md
-          fi
           {
             echo "title=[$DATE_TITLE] Rhelo Desktop $TITLE_CHANNEL — v$VERSION"
             echo "prerelease=$PRERELEASE"

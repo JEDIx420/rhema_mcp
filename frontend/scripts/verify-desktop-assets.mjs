@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { parseCargoLockPackageVersion } from "./desktop-version.mjs";
+
 const repositoryRoot = resolve("..");
 const schemaVersionPath = resolve(repositoryRoot, "schema-version.txt");
 const databasePath = resolve(repositoryRoot, "rhelo.db");
@@ -31,13 +33,12 @@ try {
   const cargoManifest = readFileSync(resolve("src-tauri", "Cargo.toml"), "utf8");
   const cargoLock = readFileSync(resolve("src-tauri", "Cargo.lock"), "utf8");
   const cargoPackage = cargoManifest.match(/^\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m);
-  const cargoLockPackage = cargoLock.match(/^\[\[package\]\]\nname = "rhelo"\nversion = "([^"]+)"/m);
   const versions = {
     "package.json": packageManifest.version,
     "package-lock.json": packageLock.version,
     "package-lock.json root package": packageLock.packages?.[""]?.version,
     "Cargo.toml": cargoPackage?.[1],
-    "Cargo.lock": cargoLockPackage?.[1],
+    "Cargo.lock": parseCargoLockPackageVersion(cargoLock, "rhelo"),
     "tauri.conf.json": tauriConfig.version,
   };
   const expectedVersion = packageManifest.version;

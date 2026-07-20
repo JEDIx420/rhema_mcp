@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "verify:desktop": "node scripts/verify-desktop-assets.mjs",
+    "verify:desktop": "node --test scripts/desktop-version.test.mjs && node scripts/verify-desktop-assets.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
