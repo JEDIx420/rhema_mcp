@@ -4,10 +4,9 @@ import { useState, useEffect, type ReactNode } from "react";
 import { Loader2, MapPin, Volume2, ChevronDown, ChevronLeft, ChevronRight, Plus, Notebook } from "lucide-react";
 import { fetchVerseDetails, lookupLexicon, fetchOccurrences, fetchSessions, createSession, updateSession } from "@/lib/api";
 import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
-import { getBookName } from "@/lib/books";
+import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import { setGlassDragImage } from "@/lib/drag";
-import { ensureGreekVoice, invokeSpeech } from "@/lib/speech";
-import { TtsWarning } from "@/components/TtsWarning";
+import { invokeSpeech, isTtsRecoveryError } from "@/lib/speech";
 
 const addDateHeaderIfNeeded = (currentContent: string) => {
   const today = new Date();
@@ -459,16 +458,18 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
   };
 
   const speakWord = async (word: string, isGreek: boolean) => {
-    if (isGreek && !ensureGreekVoice()) {
-      return;
+    try {
+      await invokeSpeech("stop_speech", {}).catch(() => { });
+      await invokeSpeech("speak_text", { text: word, lang: isGreek ? "el" : "he" });
+    } catch (error) {
+      if (!isTtsRecoveryError(error)) console.error("Original-language pronunciation failed", error);
     }
-    await invokeSpeech("stop_speech", {}).catch(() => { });
-    await invokeSpeech("speak_text", { text: word, lang: isGreek ? "el" : "he" });
   };
 
+  const isGreekVerse = BIBLE_BOOKS.find((book) => verseId.startsWith(book.code))?.testament === "NT";
+
   const handlePlayAudio = (lemma: string) => {
-    const isOT = verseId.startsWith("GEN") || verseId.startsWith("EXO") || verseId.startsWith("LEV") || verseId.startsWith("NUM") || verseId.startsWith("DEU") || verseId.startsWith("JOS") || verseId.startsWith("JDG") || verseId.startsWith("RUT") || verseId.startsWith("1SA") || verseId.startsWith("2SA") || verseId.startsWith("1KI") || verseId.startsWith("2KI") || verseId.startsWith("1CH") || verseId.startsWith("2CH") || verseId.startsWith("EZR") || verseId.startsWith("NEH") || verseId.startsWith("EST") || verseId.startsWith("JOB") || verseId.startsWith("PSA") || verseId.startsWith("PRO") || verseId.startsWith("ECC") || verseId.startsWith("SNG") || verseId.startsWith("ISA") || verseId.startsWith("JER") || verseId.startsWith("LAM") || verseId.startsWith("EZK") || verseId.startsWith("DAN") || verseId.startsWith("HOS") || verseId.startsWith("JOL") || verseId.startsWith("AMO") || verseId.startsWith("OBD") || verseId.startsWith("JON") || verseId.startsWith("MIC") || verseId.startsWith("NAM") || verseId.startsWith("HAB") || verseId.startsWith("ZEP") || verseId.startsWith("HAG") || verseId.startsWith("ZEC") || verseId.startsWith("MAL");
-    speakWord(lemma, !isOT);
+    speakWord(lemma, isGreekVerse);
   };
 
   if (loading) {
@@ -509,7 +510,6 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
-      <TtsWarning />
       {/* Header Tabs */}
       <div className="flex border-b border-slate-200 text-sm font-semibold bg-slate-50 shrink-0">
         <button
@@ -692,6 +692,7 @@ export default function StudyPane({ verseId, onVerseClick, initialTab, initialLe
                   <button
                     onClick={() => handlePlayAudio(activeWordIndex !== -1 ? (morphWords[activeWordIndex].lemma || morphWords[activeWordIndex].word) : activeLexiconWord)}
                     className="p-0.5 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-all cursor-pointer"
+                    aria-label={`Hear ${isGreekVerse ? "Greek" : "Hebrew"} pronunciation`}
                   >
                     <Volume2 size={13} />
                   </button>

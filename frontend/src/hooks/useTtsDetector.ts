@@ -1,91 +1,115 @@
-import { useEffect, useState } from "react";
-import { normalizeSpeechLocale } from "@/lib/speech";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type TtsStatus = "checking" | "ready" | "missing";
+import { fetchTtsDiagnostics, type TtsDiagnosticsResponse } from "@/lib/api";
+import { getBrowserTtsDiagnosticsFrom, normalizeSpeechLocale } from "@/lib/speech";
+import { consumeFocusRefresh, originalLanguageFromLocale } from "@/lib/ttsRecovery";
 
-const normalizeLanguage = (language: string) =>
-  language.toLowerCase().replace("_", "-");
+export type TtsStatus = "checking" | "ready" | "missing";
 
-export const useTtsDetector = (lang: string = "el-GR") => {
-  const [status, setStatus] = useState<TtsStatus>("checking");
+export interface TtsDetection {
+  status: TtsStatus;
+  nativeVoiceFound: boolean | null;
+  browserVoiceFound: boolean;
+  selectedVoice: string | null;
+}
+
+const nativeSelectionFor = (diagnostics: TtsDiagnosticsResponse, language: string) => {
+  const normalized = normalizeSpeechLocale(language);
+  if (normalized === "el-gr") return diagnostics.greek;
+  if (normalized === "he-il") return diagnostics.hebrew;
+  return diagnostics.english;
+};
+
+export async function detectTtsAvailabilityWith(
+  language: string,
+  loadNative: () => Promise<TtsDiagnosticsResponse>,
+  browserVoices: SpeechSynthesisVoice[],
+): Promise<TtsDetection> {
+  const browser = getBrowserTtsDiagnosticsFrom(browserVoices);
+  const normalized = normalizeSpeechLocale(language);
+  const browserVoice = normalized === "el-gr" ? browser.greek : normalized === "he-il" ? browser.hebrew : browser.english;
+
+  try {
+    const native = nativeSelectionFor(await loadNative(), language);
+    const available = native.available || browserVoice !== null;
+    return {
+      status: available ? "ready" : "missing",
+      nativeVoiceFound: native.available,
+      browserVoiceFound: browserVoice !== null,
+      selectedVoice: native.selected_voice?.name ?? browserVoice?.name ?? null,
+    };
+  } catch {
+    return {
+      status: browserVoice ? "ready" : "missing",
+      nativeVoiceFound: null,
+      browserVoiceFound: browserVoice !== null,
+      selectedVoice: browserVoice?.name ?? null,
+    };
+  }
+}
+
+export const useTtsDetector = (lang: string = "el-GR", enabled = true) => {
+  const [detection, setDetection] = useState<TtsDetection>({
+    status: "checking",
+    nativeVoiceFound: null,
+    browserVoiceFound: false,
+    selectedVoice: null,
+  });
+  const refreshInFlight = useRef(false);
+  const pendingSettingsFocus = useRef(false);
+  const previousAvailable = useRef<boolean | null>(null);
+
+  const refresh = useCallback(async (showChecking = false) => {
+    if (!enabled || refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    if (showChecking) setDetection((current) => ({ ...current, status: "checking" }));
+
+    const voices = typeof window !== "undefined" && "speechSynthesis" in window
+      ? window.speechSynthesis.getVoices()
+      : [];
+    try {
+      const next = await detectTtsAvailabilityWith(lang, fetchTtsDiagnostics, voices);
+      const available = next.status === "ready";
+      if (previousAvailable.current !== true && available) {
+        const language = originalLanguageFromLocale(lang);
+        if (language) window.dispatchEvent(new CustomEvent("rhelo:tts-voice-detected", { detail: { language } }));
+      }
+      previousAvailable.current = available;
+      setDetection(next);
+    } finally {
+      refreshInFlight.current = false;
+    }
+  }, [enabled, lang]);
 
   useEffect(() => {
-    let cancelled = false;
-    let retries = 0;
-    const maxRetries = 10;
-    const normalizedTarget = normalizeSpeechLocale(lang);
-    const targetBase = normalizedTarget.split("-")[0];
-    const aliases =
-      normalizedTarget === "he-il"
-        ? ["he-il", "he", "iw-il", "iw"]
-        : normalizedTarget === "el-gr"
-          ? ["el-gr", "el"]
-          : ["en-us", "en-gb", "en"];
+    if (!enabled) return undefined;
+    void refresh(true);
 
-    const matchesLanguage = (voiceLang: string) => {
-      const normalizedVoice = normalizeLanguage(voiceLang);
-      const voiceBase = normalizedVoice.split("-")[0];
-      return (
-        normalizedVoice === normalizedTarget ||
-        voiceBase === targetBase ||
-        normalizedVoice.startsWith(`${targetBase}-`) ||
-        aliases.includes(normalizedVoice)
-      );
+    const handleSettingsOpened = () => {
+      pendingSettingsFocus.current = true;
     };
-
-    const checkVoices = () => {
-      if (cancelled) return false;
-      const voices = window.speechSynthesis.getVoices();
-      if (
-        voices.some((voice) =>
-          matchesLanguage(voice.lang) ||
-          (targetBase === "el" && /greek|stefanos/i.test(voice.name)) ||
-          (targetBase === "he" && /hebrew/i.test(voice.name)),
-        )
-      ) {
-        setStatus("ready");
-        return true;
-      }
-      return false;
+    const handleFocus = () => {
+      const focusRefresh = consumeFocusRefresh(pendingSettingsFocus.current);
+      pendingSettingsFocus.current = focusRefresh.pending;
+      if (!focusRefresh.shouldRefresh) return;
+      void refresh(true);
     };
+    const handleVoicesChanged = () => void refresh(false);
 
-    const settleMissing = () => {
-      if (!cancelled) setStatus((current) => (current === "checking" ? "missing" : current));
-    };
-
-    if (checkVoices()) {
-      return () => {
-        cancelled = true;
-      };
+    window.addEventListener("rhelo:windows-settings-opened", handleSettingsOpened);
+    window.addEventListener("focus", handleFocus);
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged);
     }
 
-    const interval = window.setInterval(() => {
-      if (checkVoices()) {
-        window.clearInterval(interval);
-        return;
-      }
-
-      retries += 1;
-      if (retries >= maxRetries) {
-        window.clearInterval(interval);
-        settleMissing();
-      }
-    }, 500);
-
-    const handleVoicesChanged = () => {
-      if (checkVoices()) {
-        window.clearInterval(interval);
-      }
-    };
-
-    window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged);
-
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+      window.removeEventListener("rhelo:windows-settings-opened", handleSettingsOpened);
+      window.removeEventListener("focus", handleFocus);
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+      }
     };
-  }, [lang]);
+  }, [enabled, lang, refresh]);
 
-  return status;
+  return { ...detection, refresh: () => refresh(true) };
 };

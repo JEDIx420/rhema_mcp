@@ -25,7 +25,7 @@ import { BIBLE_BOOKS, getBookName } from "@/lib/books";
 import BookChapterPickerModal from "./BookChapterPickerModal";
 import StudyPane from "./StudyPane";
 import { setGlassDragImage } from "@/lib/drag";
-import { invokeSpeech } from "@/lib/speech";
+import { invokeSpeech, isTtsRecoveryError } from "@/lib/speech";
 import { useEnglishTranslation } from "@/components/EnglishTranslationProvider";
 import { ENGLISH_TRANSLATIONS } from "@/lib/englishTranslations";
 
@@ -527,7 +527,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
           }, duration);
 
         } catch (err) {
-          console.error("Chapter play failed", err);
+          if (!isTtsRecoveryError(err)) console.error("Chapter play failed", err);
           if (active) {
             handleStopChapter();
           }
@@ -583,10 +583,12 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       singleSpeakTimerRef.current = setTimeout(() => {
         setSpeakingKey(null);
       }, duration);
-    } catch (err: any) {
-      console.error("Speak failed", err);
+    } catch (err) {
       setSpeakingKey(null);
-      alert(err || "Speech synthesis failed.");
+      if (!isTtsRecoveryError(err)) {
+        console.error("Speak failed", err);
+        alert(err instanceof Error ? err.message : "Speech synthesis failed.");
+      }
     }
   };
 
@@ -745,7 +747,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
       const langCode = isGreek ? "el-GR" : "he-IL";
       await invokeSpeech("speak_text", { text: word, lang: langCode });
     } catch (err) {
-      console.error("speakWord failed", err);
+      if (!isTtsRecoveryError(err)) console.error("speakWord failed", err);
     }
   };
 
@@ -1340,6 +1342,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                                 }}
                                 className="text-blue-600 hover:text-blue-800 p-0.5 rounded hover:bg-blue-50 cursor-pointer transition-opacity opacity-0 group-hover/col:opacity-100"
                                 title="Play chapter from this verse"
+                                aria-label={t.key === "text_original"
+                                  ? `Play ${BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT" ? "Greek" : "Hebrew"} chapter from this verse`
+                                  : "Play English chapter from this verse"}
                                 style={{ width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}
                               >
                                 <Play size={10} fill="currentColor" />
@@ -1386,6 +1391,9 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                                   : "text-slate-400 hover:text-slate-700 cursor-pointer opacity-50 group-hover/col:opacity-100"
                                 }`}
                               title="Listen to translation"
+                              aria-label={t.key === "text_original"
+                                ? `Hear ${BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT" ? "Greek" : "Hebrew"} pronunciation`
+                                : "Hear English translation"}
                             >
                               <Volume2 size={13} className={speakingKey === `${v.id}-${t.key}` ? "animate-pulse" : ""} />
                             </button>
@@ -1630,6 +1638,7 @@ export default function ReadingDesk(props: ReadingDeskProps) {
                           onClick={() => handlePlayAudio(selectedLexiconModalWord.lemma)}
                           className="p-0.5 text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
                           title="Play Pronunciation Audio"
+                          aria-label={`Hear ${BIBLE_BOOKS.find((b) => b.code === book)?.testament === "NT" ? "Greek" : "Hebrew"} pronunciation`}
                         >
                           <Volume2 size={13} />
                         </button>

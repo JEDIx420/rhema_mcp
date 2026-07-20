@@ -4,10 +4,12 @@ import { Component, useState, useEffect, useRef, type ErrorInfo, type ReactNode 
 import Sidebar from "@/components/Sidebar";
 import CommandCenter from "@/components/CommandCenter";
 import AppViewRouter from "@/components/AppViewRouter";
+import { TtsWarning } from "@/components/TtsWarning";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Save } from "lucide-react";
 import { fetchSessions, updateSession } from "@/lib/api";
 import { readVerseDragPayload, renderVerseDropHtml, VerseDragPayload } from "@/lib/verseDrop";
+import { createTtsSettingsTarget, type OriginalLanguage, type TtsSettingsTarget } from "@/lib/ttsRecovery";
 
 const invokeTauri = async (cmd: string, args: any) => {
   if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined) {
@@ -88,6 +90,7 @@ export default function Home() {
   const [chapter, setChapter] = useState(1);
   const [selectedVerseId, setSelectedVerseId] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>("Adam_1");
+  const [settingsTarget, setSettingsTarget] = useState<TtsSettingsTarget | null>(null);
 
   // Drag-and-drop overlays state
   const [draggedVerse, setDraggedVerse] = useState<VerseDragPayload | null>(null);
@@ -342,7 +345,7 @@ export default function Home() {
       }));
       
       setTranscribedText(null);
-      setActiveView("sessions");
+      handleViewChange("sessions");
     } catch (err) {
       console.error(err);
       alert(`The transcription could not be saved: ${err instanceof Error ? err.message : String(err)}`);
@@ -359,17 +362,27 @@ export default function Home() {
     }
   };
 
+  const handleViewChange = (view: string) => {
+    if (view !== "settings") setSettingsTarget(null);
+    setActiveView(view);
+  };
+
+  const handleGoToTtsSettings = (missingLanguage: OriginalLanguage) => {
+    setSettingsTarget(createTtsSettingsTarget(missingLanguage, Date.now()));
+    setActiveView("settings");
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 relative print:!block print:!h-auto print:!min-h-0 print:!overflow-visible">
       {/* CommandCenter Keyboard-Activated Command Launcher */}
       <CommandCenter
         onNavigate={handleNavigate}
         onSelectPerson={setSelectedPersonId}
-        onViewChange={setActiveView}
+        onViewChange={handleViewChange}
       />
 
       {/* Persistent Sidebar */}
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar activeView={activeView} onViewChange={handleViewChange} />
       
       {/* Main Panel Viewport */}
       <main className="flex-1 overflow-hidden print:!block print:!h-auto print:!min-h-0 print:!overflow-visible">
@@ -393,13 +406,16 @@ export default function Home() {
                 setChapter={setChapter}
                 setSelectedVerseId={setSelectedVerseId}
                 setSelectedPersonId={setSelectedPersonId}
-                setActiveView={setActiveView}
+                setActiveView={handleViewChange}
+                settingsTarget={settingsTarget}
                 onNavigate={handleNavigate}
               />
             </DiagnosticErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <TtsWarning onGoToSettings={handleGoToTtsSettings} />
 
       {/* --- FLOATING WORKSPACE OVERLAYS --- */}
 
@@ -471,7 +487,7 @@ export default function Home() {
               ));
 
               window.dispatchEvent(new CustomEvent("rhelo-session-updated"));
-              setActiveView("sessions");
+              handleViewChange("sessions");
             } catch (err) {
               const msg = `[RHELO-DROP-DEBUG] ${err instanceof Error ? err.stack || err.message : String(err)}`;
               console.error(msg);

@@ -24,7 +24,7 @@ import {
   type TopicEntry,
 } from "@/lib/api";
 import { setGlassDragImage } from "@/lib/drag";
-import { invokeSpeech } from "@/lib/speech";
+import { invokeSpeech, isTtsRecoveryError } from "@/lib/speech";
 import StudyPane from "./StudyPane";
 
 interface DictionarySelection {
@@ -96,9 +96,11 @@ export default function DictionaryView() {
       if (speakTimerRef.current) clearTimeout(speakTimerRef.current);
       speakTimerRef.current = setTimeout(() => setSpeakingKey(null), duration);
     } catch (error) {
-      console.error("Speak failed", error);
       setSpeakingKey(null);
-      alert(error || "Speech synthesis failed.");
+      if (!isTtsRecoveryError(error)) {
+        console.error("Speak failed", error);
+        alert(error instanceof Error ? error.message : "Speech synthesis failed.");
+      }
     }
   };
 
@@ -320,6 +322,7 @@ export default function DictionaryView() {
                                 : "border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-800"
                             }`}
                             title="Pronounce original word"
+                            aria-label={`Hear ${result.strongs_id.toUpperCase().startsWith("G") ? "Greek" : "Hebrew"} pronunciation`}
                           >
                             <Volume2 size={14} />
                           </button>

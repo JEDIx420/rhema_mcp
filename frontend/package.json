@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "verify:desktop": "node --test scripts/desktop-version.test.mjs && node scripts/verify-desktop-assets.mjs",
+    "test:tts": "tsx --test scripts/tts-recovery.test.ts",
+    "verify:desktop": "node --test scripts/desktop-version.test.mjs && npm run test:tts && node scripts/verify-desktop-assets.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   }
 }

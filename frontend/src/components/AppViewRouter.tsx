@@ -6,6 +6,7 @@ import SearchView from "@/components/SearchView";
 import SessionsView from "@/components/SessionsView";
 import SettingsView from "@/components/SettingsView";
 import TimelineView from "@/components/TimelineView";
+import type { TtsSettingsTarget } from "@/lib/ttsRecovery";
 
 interface AppViewRouterProps {
   activeView: string;
@@ -18,6 +19,7 @@ interface AppViewRouterProps {
   setSelectedVerseId: (verseId: string | null) => void;
   setSelectedPersonId: (personId: string | null) => void;
   setActiveView: (view: string) => void;
+  settingsTarget: TtsSettingsTarget | null;
   onNavigate: (book: string, chapter: number, verse?: number) => void;
 }
 
@@ -36,7 +38,7 @@ export default function AppViewRouter(props: AppViewRouterProps) {
     case "sessions":
       return <SessionsView />;
     case "settings":
-      return <SettingsView />;
+      return <SettingsView navigationTarget={props.settingsTarget} />;
     case "read":
     default:
       return <ReadingDesk book={props.book} chapter={props.chapter} setBook={props.setBook} setChapter={props.setChapter} selectedVerseId={props.selectedVerseId} setSelectedVerseId={props.setSelectedVerseId} onViewChange={props.setActiveView} />;

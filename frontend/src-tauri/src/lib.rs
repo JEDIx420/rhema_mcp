@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Manager;
+#[cfg(target_os = "windows")]
+use tauri_plugin_shell::ShellExt;
 use tts::Tts;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -53,6 +55,15 @@ struct TtsDiagnosticsResponse {
     english: TtsVoiceSelection,
     greek: TtsVoiceSelection,
     hebrew: TtsVoiceSelection,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct SystemSettingsOpenResult {
+    opened: bool,
+    requested_page: String,
+    opened_uri: Option<String>,
+    used_fallback: bool,
+    error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -767,6 +778,79 @@ fn fetch_tts_diagnostics(
     })
 }
 
+fn windows_settings_uri(page: &str) -> Option<&'static str> {
+    match page {
+        "language" => Some("ms-settings:regionlanguage"),
+        "speech" => Some("ms-settings:speech"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+fn open_windows_settings(page: String, app: tauri::AppHandle) -> SystemSettingsOpenResult {
+    let Some(uri) = windows_settings_uri(&page) else {
+        return SystemSettingsOpenResult {
+            opened: false,
+            requested_page: page,
+            opened_uri: None,
+            used_fallback: false,
+            error: Some("Unsupported Windows Settings page.".to_string()),
+        };
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        #[allow(deprecated)]
+        match app.shell().open(uri, None) {
+            Ok(()) => SystemSettingsOpenResult {
+                opened: true,
+                requested_page: page,
+                opened_uri: Some(uri.to_string()),
+                used_fallback: false,
+                error: None,
+            },
+            Err(primary_error) => {
+                let fallback_uri = "ms-settings:";
+                #[allow(deprecated)]
+                match app.shell().open(fallback_uri, None) {
+                    Ok(()) => SystemSettingsOpenResult {
+                        opened: true,
+                        requested_page: page,
+                        opened_uri: Some(fallback_uri.to_string()),
+                        used_fallback: true,
+                        error: Some(format!(
+                            "The requested page could not be opened directly: {primary_error}"
+                        )),
+                    },
+                    Err(fallback_error) => SystemSettingsOpenResult {
+                        opened: false,
+                        requested_page: page,
+                        opened_uri: None,
+                        used_fallback: true,
+                        error: Some(format!(
+                            "Windows Settings could not be opened: {primary_error}; fallback failed: {fallback_error}"
+                        )),
+                    },
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        SystemSettingsOpenResult {
+            opened: false,
+            requested_page: page,
+            opened_uri: None,
+            used_fallback: false,
+            error: Some(format!(
+                "Windows Settings URI {uri} is unavailable on this operating system."
+            )),
+        }
+    }
+}
+
 #[tauri::command]
 fn speak_text(
     text: String,
@@ -844,8 +928,8 @@ fn speak_text(
 mod tts_voice_tests {
     use super::{
         apply_migrations, backup_path_for_suffix, normalize_requested_tts_locale, open_database,
-        prepare_database_at_paths, read_user_version, select_voice, TtsVoiceDescriptor,
-        CURRENT_SCHEMA_VERSION, DATABASE_BACKUP_PREFIX,
+        prepare_database_at_paths, read_user_version, select_voice, windows_settings_uri,
+        TtsVoiceDescriptor, CURRENT_SCHEMA_VERSION, DATABASE_BACKUP_PREFIX,
     };
     use rusqlite::Connection;
     use std::fs;
@@ -922,6 +1006,16 @@ mod tts_voice_tests {
         let english_only = vec![voice("English Only", "en-us")];
         assert_eq!(select_voice(&english_only, "el-gr"), None);
         assert_eq!(select_voice(&english_only, "he-il"), None);
+    }
+
+    #[test]
+    fn windows_voice_setup_uses_restricted_settings_uris() {
+        assert_eq!(
+            windows_settings_uri("language"),
+            Some("ms-settings:regionlanguage")
+        );
+        assert_eq!(windows_settings_uri("speech"), Some("ms-settings:speech"));
+        assert_eq!(windows_settings_uri("arbitrary"), None);
     }
 
     fn temp_db_path(name: &str) -> PathBuf {
@@ -1473,6 +1567,7 @@ pub fn run() {
             update_session,
             delete_session,
             fetch_tts_diagnostics,
+            open_windows_settings,
             speak_text,
             stop_speech,
             transcribe_audio
