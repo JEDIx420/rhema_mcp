@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test:tts": "tsx --test scripts/tts-recovery.test.ts",
-    "verify:desktop": "node --test scripts/desktop-version.test.mjs && npm run test:tts && node scripts/verify-desktop-assets.mjs",
+    "test:translations": "tsx --test scripts/translation-compare.test.ts",
+    "verify:desktop": "node --test scripts/desktop-version.test.mjs && npm run test:tts && npm run test:translations && node scripts/verify-desktop-assets.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -11,10 +11,12 @@ import {
   BookMarked,
   Settings,
   Notebook,
+  Columns3,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "read", label: "Read", icon: BookOpen },
+  { id: "compare", label: "Compare", icon: Columns3 },
   { id: "search", label: "Search", icon: Search },
   { id: "map", label: "Maps", icon: Map },
   { id: "timeline", label: "Timeline", icon: Clock },
@@ -69,7 +71,7 @@ export default function Sidebar({
       </div>
 
       {/* Main Navigation links - spaced out starting from top */}
-      <nav className="flex flex-col gap-3 w-full px-3.5 pt-6 flex-1 justify-start">
+      <nav className="flex min-h-0 flex-1 flex-col justify-start gap-3 overflow-y-auto w-full px-3.5 pt-6">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;

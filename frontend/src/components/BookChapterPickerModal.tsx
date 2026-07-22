@@ -13,6 +13,7 @@ interface BookChapterPickerModalProps {
   selectedBook: string;
   selectedChapter: number;
   onSelect: (book: string, chapter: number) => void;
+  showTranslationPanel?: boolean;
 }
 
 export default function BookChapterPickerModal({
@@ -20,7 +21,8 @@ export default function BookChapterPickerModal({
   onClose,
   selectedBook,
   selectedChapter,
-  onSelect
+  onSelect,
+  showTranslationPanel = true,
 }: BookChapterPickerModalProps) {
   const { activeEnglishTranslation, setActiveEnglishTranslation } = useEnglishTranslation();
   const [activePanel, setActivePanel] = useState<"scripture" | "translation">("scripture");
@@ -84,7 +86,7 @@ export default function BookChapterPickerModal({
           </button>
         </div>
 
-        <div className="border-b border-slate-100 bg-white px-6 pt-3">
+        {showTranslationPanel && <div className="border-b border-slate-100 bg-white px-6 pt-3">
           <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Scripture selection options">
             <button
               role="tab"
@@ -103,7 +105,7 @@ export default function BookChapterPickerModal({
               <Languages size={16} /> Translation
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 custom-modal-scroll">

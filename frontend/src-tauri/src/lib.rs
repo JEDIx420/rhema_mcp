@@ -139,6 +139,20 @@ struct ChapterResponse {
     translation_code: &'static str,
 }
 
+#[derive(Debug, Serialize, PartialEq)]
+struct TranslationPassageVerse {
+    verse: i64,
+    text: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslationPassageResponse {
+    translation_code: &'static str,
+    book: String,
+    chapter: i64,
+    verses: Vec<TranslationPassageVerse>,
+}
+
 pub(crate) fn open_database(path: &Path) -> Result<Connection, String> {
     let connection = Connection::open(path)
         .map_err(|error| format!("Failed to open the Rhelo database: {error}"))?;
@@ -374,6 +388,80 @@ pub(crate) fn normalize_english_translation(translation_code: Option<&str>) -> &
         Some("en_kjv") => "en_kjv",
         _ => "en_bsb",
     }
+}
+
+fn validate_embedded_translation(translation_code: &str) -> Result<&'static str, String> {
+    match translation_code {
+        "en_bsb" => Ok("en_bsb"),
+        "en_web" => Ok("en_web"),
+        "en_kjv" => Ok("en_kjv"),
+        _ => Err("The requested embedded translation is not available.".to_string()),
+    }
+}
+
+fn query_translation_passage(
+    connection: &Connection,
+    translation_code: &'static str,
+    book: &str,
+    chapter: i64,
+) -> Result<Vec<TranslationPassageVerse>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT vb.verse, COALESCE(selected.text, kjv.text, legacy.text)
+             FROM verses_base vb
+             LEFT JOIN verse_translations selected
+               ON selected.verse_id = vb.id AND selected.translation_code = ?1
+             LEFT JOIN verse_translations kjv
+               ON kjv.verse_id = vb.id AND kjv.translation_code = 'en_kjv'
+             LEFT JOIN verse_translations legacy
+               ON legacy.verse_id = vb.id AND legacy.translation_code = 'en'
+             WHERE vb.book = ?2 AND vb.chapter = ?3
+             ORDER BY vb.verse",
+        )
+        .map_err(|error| format!("Failed to prepare the translation passage query: {error}"))?;
+
+    let verses = statement
+        .query_map(params![translation_code, book, chapter], |row| {
+            Ok(TranslationPassageVerse {
+                verse: row.get(0)?,
+                text: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+            })
+        })
+        .map_err(|error| format!("Failed to read {book} {chapter}: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode {book} {chapter}: {error}"))?;
+    Ok(verses)
+}
+
+#[tauri::command]
+fn fetch_translation_passage(
+    book: String,
+    chapter: i64,
+    translation_code: String,
+    state: tauri::State<'_, DatabaseState>,
+) -> Result<TranslationPassageResponse, String> {
+    let book = book.trim().to_ascii_uppercase();
+    if book.is_empty() {
+        return Err("A Scripture book code is required.".to_string());
+    }
+    if chapter < 1 {
+        return Err("The chapter number must be greater than zero.".to_string());
+    }
+    let translation_code = validate_embedded_translation(translation_code.trim())?;
+    let connection = open_database(&state.path)?;
+    let verses = query_translation_passage(&connection, translation_code, &book, chapter)?;
+    if verses.is_empty() {
+        return Err(format!(
+            "No embedded passage was found for {book} {chapter}."
+        ));
+    }
+
+    Ok(TranslationPassageResponse {
+        translation_code,
+        book,
+        chapter,
+        verses,
+    })
 }
 
 #[tauri::command]
@@ -928,8 +1016,9 @@ fn speak_text(
 mod tts_voice_tests {
     use super::{
         apply_migrations, backup_path_for_suffix, normalize_requested_tts_locale, open_database,
-        prepare_database_at_paths, read_user_version, select_voice, windows_settings_uri,
-        TtsVoiceDescriptor, CURRENT_SCHEMA_VERSION, DATABASE_BACKUP_PREFIX,
+        prepare_database_at_paths, query_translation_passage, read_user_version, select_voice,
+        validate_embedded_translation, windows_settings_uri, TtsVoiceDescriptor,
+        CURRENT_SCHEMA_VERSION, DATABASE_BACKUP_PREFIX,
     };
     use rusqlite::Connection;
     use std::fs;
@@ -941,6 +1030,41 @@ mod tts_voice_tests {
             name: name.to_string(),
             language: language.to_string(),
         }
+    }
+
+    #[test]
+    fn embedded_translation_allowlist_rejects_provider_ids_from_the_ui() {
+        assert_eq!(validate_embedded_translation("en_bsb"), Ok("en_bsb"));
+        assert_eq!(validate_embedded_translation("en_web"), Ok("en_web"));
+        assert_eq!(validate_embedded_translation("en_kjv"), Ok("en_kjv"));
+        assert!(validate_embedded_translation("display name").is_err());
+        assert!(validate_embedded_translation("remote-provider-id").is_err());
+    }
+
+    #[test]
+    fn embedded_passage_query_uses_selected_text_and_canonical_fallback() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE verses_base (
+                    id TEXT PRIMARY KEY, book TEXT, chapter INTEGER, verse INTEGER
+                 );
+                 CREATE TABLE verse_translations (
+                    verse_id TEXT, translation_code TEXT, text TEXT,
+                    PRIMARY KEY (verse_id, translation_code)
+                 );
+                 INSERT INTO verses_base VALUES ('JHN.3.1', 'JHN', 3, 1), ('JHN.3.2', 'JHN', 3, 2);
+                 INSERT INTO verse_translations VALUES
+                    ('JHN.3.1', 'en_web', 'WEB one'),
+                    ('JHN.3.1', 'en_kjv', 'KJV one'),
+                    ('JHN.3.2', 'en_kjv', 'KJV fallback'),
+                    ('JHN.3.2', 'en', 'Legacy two');",
+            )
+            .unwrap();
+
+        let passage = query_translation_passage(&connection, "en_web", "JHN", 3).unwrap();
+        assert_eq!(passage[0].text, "WEB one");
+        assert_eq!(passage[1].text, "KJV fallback");
     }
 
     #[test]
@@ -1552,6 +1676,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             fetch_chapter,
+            fetch_translation_passage,
             research::search_scripture,
             research::lookup_lexicon,
             research::fetch_research_meta,

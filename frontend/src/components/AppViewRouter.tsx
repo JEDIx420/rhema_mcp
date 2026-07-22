@@ -1,4 +1,5 @@
 import DictionaryView from "@/components/DictionaryView";
+import CompareTranslationsView from "@/components/CompareTranslationsView";
 import GenealogyView from "@/components/GenealogyView";
 import MapView from "@/components/MapView";
 import ReadingDesk from "@/components/ReadingDesk";
@@ -29,6 +30,17 @@ export default function AppViewRouter(props: AppViewRouterProps) {
       return <SearchView onNavigate={props.onNavigate} onViewChange={props.setActiveView} />;
     case "dictionary":
       return <DictionaryView />;
+    case "compare":
+      return (
+        <CompareTranslationsView
+          book={props.book}
+          chapter={props.chapter}
+          setBook={props.setBook}
+          setChapter={props.setChapter}
+          setSelectedVerseId={props.setSelectedVerseId}
+          onViewChange={props.setActiveView}
+        />
+      );
     case "map":
       return <MapView book={props.book} chapter={props.chapter} onNavigate={props.onNavigate} />;
     case "timeline":

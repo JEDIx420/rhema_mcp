@@ -47,6 +47,25 @@ export async function fetchChapter(book: string, chapter: number): Promise<Chapt
   });
 }
 
+export interface EmbeddedPassageResponse {
+  translation_code: string;
+  book: string;
+  chapter: number;
+  verses: Array<{ verse: number; text: string }>;
+}
+
+export async function fetchEmbeddedTranslationPassage(
+  translationCode: string,
+  book: string,
+  chapter: number,
+): Promise<EmbeddedPassageResponse> {
+  return invokeDesktop<EmbeddedPassageResponse>("fetch_translation_passage", {
+    translationCode,
+    book,
+    chapter,
+  });
+}
+
 export interface ScriptureSearchResult {
   id: string;
   book: string;
